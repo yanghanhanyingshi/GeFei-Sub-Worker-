@@ -115,20 +115,32 @@ SUB_TOKEN：设置生成订阅的安全秘钥（例如 MySecretToken888），用
 在克隆或 fork 本项目代码部署前，请全局搜索并替换 worker.js 中的以下占位符为你自己的个性化信息：
 
 YOUR_BRAND_NAME：你的品牌或网站名称。
+
 YOUR_BACKGROUND_IMAGE_URL：首页背景图 URL。
+
 YOUR_AVATAR_IMAGE_URL：首页头像/Logo URL。
+
 YOUR_TELEGRAM：获取 Token 的个人 Telegram 链接。
+
 YOUR_GROUP：你的交流群组链接。
+
 YOUR_NAME：页脚的维护者署名。
+
 example.com：如果你有自己的外部测速 API，请将下拉列表中的示例域名替换掉。
+
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ⚠️ 免责声明
 本项目仅供网络技术学习、研究与交流使用。请勿用于任何违反当地法律法规的非法用途。开发者不对使用本程序所造成的任何后果负责。
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-## ⭐ Star 星星走起
-[![Stargazers over time](https://starchart.cc/cmliu/CF-Workers-SUB.svg?variant=adaptive)](https://starchart.cc/cmliu/CF-Workers-SUB)
-
+## Star History ⭐  ⭐  ⭐ Star 星星走起
+<a href="https://www.star-history.com/?repos=xiagefei%2FGeFei-Sub-Worker-&type=date&legend=bottom-right">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=xiagefei/GeFei-Sub-Worker-&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=xiagefei/GeFei-Sub-Worker-&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=xiagefei/GeFei-Sub-Worker-&type=date&legend=bottom-right" />
+ </picture>
+</a>
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # 🙏 致谢
 [DesireOr2]([https://alicenetworks.net/](https://github.com/DesireOr2/Desire-Sub-Worker))
