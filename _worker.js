@@ -1,828 +1,930 @@
+// ==========================================
+// 全局配置与预设
+// ==========================================
+const PAGE_SIZE = 30;
+const BATCH_SIZE = 50;
+const MAX_IPS = 1000; 
+const CACHE_TTL = 60;
+const STATS_CACHE_KEY = 'cache:stats';
+const TASK_TTL = 300; 
 
-// 部署完成后在网址后面加上这个，获取自建节点和机场聚合节点，/?token=auto或/auto或
+const REGIONS = ['HK', '香港', 'TW', '台湾', 'JP', '日本', 'SG', '新加坡', 'KR', '韩国', 'US', '美国'];
+const REGION_ORDER = new Map(REGIONS.map((r, i) => [r, i]));
+const UNKNOWN_REGION_INDEX = REGIONS.length;
+const REGION_PATTERNS = REGIONS.map(r => `(${r})`).join('|');
+const COMBINED_REGION_REGEX = new RegExp(REGION_PATTERNS, 'i');
+const IP_FORMAT_REGEX = /^(\[[a-fA-F0-9:]+\]|[^:#\[\]]+)(?::(\d+))?(#.*)?$/;
 
-let mytoken = 'auto';
-let guestToken = ''; //可以随便取，或者uuid生成，https://1024tools.com/uuid
-let BotToken = ''; //可以为空，或者@BotFather中输入/start，/newbot，并关注机器人
-let ChatID = ''; //可以为空，或者@userinfobot中获取，/start
-let TG = 0; //小白勿动， 开发者专用，1 为推送所有的访问信息，0 为不推送订阅转换后端的访问信息与异常访问
-let FileName = 'CF-Workers-SUB';
-let SUBUpdateTime = 6; //自定义订阅更新时间，单位小时
-let total = 99;//TB
-let timestamp = 4102329600000;//2099-12-31
+// ==========================================
+// 核心工具函数
+// ==========================================
+const json = (d, s = 200) => Response.json(d, { status: s });
+const err = (m, s = 400) => Response.json({ error: m }, { status: s });
+const encodeBase64 = (str) => btoa(unescape(encodeURIComponent(str)));
+const decodeBase64 = (str) => decodeURIComponent(escape(atob(str)));
 
-//节点链接 + 订阅链接
-let MainData = `
-https://cfxr.eu.org/getSub
-`;
-
-let urls = [];
-let subConverter = "SUBAPI.cmliussss.net"; //在线订阅转换后端，目前使用CM的订阅转换功能。支持自建psub 可自行搭建https://github.com/bulianglin/psub
-let subConfig = "https://raw.githubusercontent.com/cmliu/ACL4SSR/main/Clash/config/ACL4SSR_Online_MultiCountry.ini"; //订阅配置文件
-let subProtocol = 'https';
-
-export default {
-	async fetch(request, env) {
-		const userAgentHeader = request.headers.get('User-Agent');
-		const userAgent = userAgentHeader ? userAgentHeader.toLowerCase() : "null";
-		const url = new URL(request.url);
-		const token = url.searchParams.get('token');
-		mytoken = env.TOKEN || mytoken;
-		BotToken = env.TGTOKEN || BotToken;
-		ChatID = env.TGID || ChatID;
-		TG = env.TG || TG;
-		subConverter = env.SUBAPI || subConverter;
-		if (subConverter.includes("http://")) {
-			subConverter = subConverter.split("//")[1];
-			subProtocol = 'http';
-		} else {
-			subConverter = subConverter.split("//")[1] || subConverter;
-		}
-		subConfig = env.SUBCONFIG || subConfig;
-		FileName = env.SUBNAME || FileName;
-
-		const currentDate = new Date();
-		currentDate.setHours(0, 0, 0, 0);
-		const timeTemp = Math.ceil(currentDate.getTime() / 1000);
-		const fakeToken = await MD5MD5(`${mytoken}${timeTemp}`);
-		guestToken = env.GUESTTOKEN || env.GUEST || guestToken;
-		if (!guestToken) guestToken = await MD5MD5(mytoken);
-		const 访客订阅 = guestToken;
-		//console.log(`${fakeUserID}\n${fakeHostName}`); // 打印fakeID
-
-		let UD = Math.floor(((timestamp - Date.now()) / timestamp * total * 1099511627776) / 2);
-		total = total * 1099511627776;
-		let expire = Math.floor(timestamp / 1000);
-		SUBUpdateTime = env.SUBUPTIME || SUBUpdateTime;
-
-		if (!([mytoken, fakeToken, 访客订阅].includes(token) || url.pathname == ("/" + mytoken) || url.pathname.includes("/" + mytoken + "?"))) {
-			if (TG == 1 && url.pathname !== "/" && url.pathname !== "/favicon.ico") await sendMessage(`#异常访问 ${FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgent}</tg-spoiler>\n域名: ${url.hostname}\n<tg-spoiler>入口: ${url.pathname + url.search}</tg-spoiler>`);
-			if (env.URL302) return Response.redirect(env.URL302, 302);
-			else if (env.URL) return await proxyURL(env.URL, url);
-			else return new Response(await nginx(), {
-				status: 200,
-				headers: {
-					'Content-Type': 'text/html; charset=UTF-8',
-				},
-			});
-		} else {
-			if (env.KV) {
-				await 迁移地址列表(env, 'LINK.txt');
-				if (userAgent.includes('mozilla') && !url.search) {
-					await sendMessage(`#编辑订阅 ${FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}</tg-spoiler>\n域名: ${url.hostname}\n<tg-spoiler>入口: ${url.pathname + url.search}</tg-spoiler>`);
-					return await KV(request, env, 'LINK.txt', 访客订阅);
-				} else {
-					MainData = await env.KV.get('LINK.txt') || MainData;
-				}
-			} else {
-				MainData = env.LINK || MainData;
-				if (env.LINKSUB) urls = await ADD(env.LINKSUB);
-			}
-			let 重新汇总所有链接 = await ADD(MainData + '\n' + urls.join('\n'));
-			let 自建节点 = "";
-			let 订阅链接 = "";
-			for (let x of 重新汇总所有链接) {
-				if (x.toLowerCase().startsWith('http')) {
-					订阅链接 += x + '\n';
-				} else {
-					自建节点 += x + '\n';
-				}
-			}
-			MainData = 自建节点;
-			urls = await ADD(订阅链接);
-			await sendMessage(`#获取订阅 ${FileName}`, request.headers.get('CF-Connecting-IP'), `UA: ${userAgentHeader}</tg-spoiler>\n域名: ${url.hostname}\n<tg-spoiler>入口: ${url.pathname + url.search}</tg-spoiler>`);
-			const isSubConverterRequest = request.headers.get('subconverter-request') || request.headers.get('subconverter-version') || userAgent.includes('subconverter');
-			let 订阅格式 = 'base64';
-			if (!(userAgent.includes('null') || isSubConverterRequest || userAgent.includes('nekobox') || userAgent.includes(('CF-Workers-SUB').toLowerCase()))) {
-				if (userAgent.includes('sing-box') || userAgent.includes('singbox') || url.searchParams.has('sb') || url.searchParams.has('singbox')) {
-					订阅格式 = 'singbox';
-				} else if (userAgent.includes('surge') || url.searchParams.has('surge')) {
-					订阅格式 = 'surge';
-				} else if (userAgent.includes('quantumult') || url.searchParams.has('quanx')) {
-					订阅格式 = 'quanx';
-				} else if (userAgent.includes('loon') || url.searchParams.has('loon')) {
-					订阅格式 = 'loon';
-				} else if (userAgent.includes('clash') || userAgent.includes('meta') || userAgent.includes('mihomo') || url.searchParams.has('clash')) {
-					订阅格式 = 'clash';
-				}
-			}
-
-			let subConverterUrl;
-			let 订阅转换URL = `${url.origin}/${await MD5MD5(fakeToken)}?token=${fakeToken}`;
-			//console.log(订阅转换URL);
-			let req_data = MainData;
-
-			let 追加UA = 'v2rayn';
-			if (url.searchParams.has('b64') || url.searchParams.has('base64')) 订阅格式 = 'base64';
-			else if (url.searchParams.has('clash')) 追加UA = 'clash';
-			else if (url.searchParams.has('singbox')) 追加UA = 'singbox';
-			else if (url.searchParams.has('surge')) 追加UA = 'surge';
-			else if (url.searchParams.has('quanx')) 追加UA = 'Quantumult%20X';
-			else if (url.searchParams.has('loon')) 追加UA = 'Loon';
-
-			const 订阅链接数组 = [...new Set(urls)].filter(item => item?.trim?.()); // 去重
-			if (订阅链接数组.length > 0) {
-				const 请求订阅响应内容 = await getSUB(订阅链接数组, request, 追加UA, userAgentHeader);
-				console.log(请求订阅响应内容);
-				req_data += 请求订阅响应内容[0].join('\n');
-				订阅转换URL += "|" + 请求订阅响应内容[1];
-				if (订阅格式 == 'base64' && !isSubConverterRequest && 请求订阅响应内容[1].includes('://')) {
-					subConverterUrl = `${subProtocol}://${subConverter}/sub?target=mixed&url=${encodeURIComponent(请求订阅响应内容[1])}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-					try {
-						const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': 'v2rayN/CF-Workers-SUB  (https://github.com/cmliu/CF-Workers-SUB)' } });
-						if (subConverterResponse.ok) {
-							const subConverterContent = await subConverterResponse.text();
-							req_data += '\n' + atob(subConverterContent);
-						}
-					} catch (error) {
-						console.log('订阅转换请回base64失败，检查订阅转换后端是否正常运行');
-					}
-				}
-			}
-
-			if (env.WARP) 订阅转换URL += "|" + (await ADD(env.WARP)).join("|");
-			//修复中文错误
-			const utf8Encoder = new TextEncoder();
-			const encodedData = utf8Encoder.encode(req_data);
-			//const text = String.fromCharCode.apply(null, encodedData);
-			const utf8Decoder = new TextDecoder();
-			const text = utf8Decoder.decode(encodedData);
-
-			//去重
-			const uniqueLines = new Set(text.split('\n'));
-			const result = [...uniqueLines].join('\n');
-			//console.log(result);
-
-			let base64Data;
-			try {
-				base64Data = btoa(result);
-			} catch (e) {
-				function encodeBase64(data) {
-					const binary = new TextEncoder().encode(data);
-					let base64 = '';
-					const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-
-					for (let i = 0; i < binary.length; i += 3) {
-						const byte1 = binary[i];
-						const byte2 = binary[i + 1] || 0;
-						const byte3 = binary[i + 2] || 0;
-
-						base64 += chars[byte1 >> 2];
-						base64 += chars[((byte1 & 3) << 4) | (byte2 >> 4)];
-						base64 += chars[((byte2 & 15) << 2) | (byte3 >> 6)];
-						base64 += chars[byte3 & 63];
-					}
-
-					const padding = 3 - (binary.length % 3 || 3);
-					return base64.slice(0, base64.length - padding) + '=='.slice(0, padding);
-				}
-
-				base64Data = encodeBase64(result)
-			}
-
-			// 构建响应头对象
-			const responseHeaders = {
-				"content-type": "text/plain; charset=utf-8",
-				"Profile-Update-Interval": `${SUBUpdateTime}`,
-				"Profile-web-page-url": request.url.includes('?') ? request.url.split('?')[0] : request.url,
-				//"Subscription-Userinfo": `upload=${UD}; download=${UD}; total=${total}; expire=${expire}`,
-			};
-
-			if (订阅格式 == 'base64' || token == fakeToken) {
-				return new Response(base64Data, { headers: responseHeaders });
-			} else if (订阅格式 == 'clash') {
-				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=clash&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-			} else if (订阅格式 == 'singbox') {
-				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=singbox&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-			} else if (订阅格式 == 'surge') {
-				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=surge&ver=4&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&new_name=true`;
-			} else if (订阅格式 == 'quanx') {
-				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=quanx&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false&udp=true`;
-			} else if (订阅格式 == 'loon') {
-				subConverterUrl = `${subProtocol}://${subConverter}/sub?target=loon&url=${encodeURIComponent(订阅转换URL)}&insert=false&config=${encodeURIComponent(subConfig)}&emoji=true&list=false&tfo=false&scv=true&fdn=false&sort=false`;
-			}
-			//console.log(订阅转换URL);
-			try {
-				const subConverterResponse = await fetch(subConverterUrl, { headers: { 'User-Agent': userAgentHeader } });//订阅转换
-				if (!subConverterResponse.ok) return new Response(base64Data, { headers: responseHeaders });
-				let subConverterContent = await subConverterResponse.text();
-				if (订阅格式 == 'clash') subConverterContent = await clashFix(subConverterContent);
-				// 只有非浏览器订阅才会返回SUBNAME
-				if (!userAgent.includes('mozilla')) responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(FileName)}`;
-				return new Response(subConverterContent, { headers: responseHeaders });
-			} catch (error) {
-				return new Response(base64Data, { headers: responseHeaders });
-			}
-		}
-	}
+// 生成伪装错误节点，让客户端能成功解析并显示报错信息
+const createErrorNode = (msg) => {
+    return `vless://00000000-0000-0000-0000-000000000000@127.0.0.1:80?encryption=none&security=none&type=tcp#${encodeURIComponent(msg)}`;
 };
 
-async function ADD(envadd) {
-	var addtext = envadd.replace(/[	"'|\r\n]+/g, '\n').replace(/\n+/g, '\n');	// 替换为换行
-	//console.log(addtext);
-	if (addtext.charAt(0) == '\n') addtext = addtext.slice(1);
-	if (addtext.charAt(addtext.length - 1) == '\n') addtext = addtext.slice(0, addtext.length - 1);
-	const add = addtext.split('\n');
-	//console.log(add);
-	return add;
+const parseIP = (ip) => {
+    if (!ip) return { displayIp: '', port: '443', name: '' };
+    const match = ip.match(IP_FORMAT_REGEX);
+    if (!match) return { displayIp: ip, port: '443', name: '' };
+    return {
+        displayIp: match[1],
+        port: match[2] || '443',
+        name: (match[3] || '').slice(1),
+    };
+};
+
+const extractRegion = (name) => {
+    if (!name) return '';
+    const match = name.match(COMBINED_REGION_REGEX);
+    return match ? match[0].toUpperCase() : '';
+};
+const getRegionIndex = (region) => region ? (REGION_ORDER.get(region) ?? UNKNOWN_REGION_INDEX) : UNKNOWN_REGION_INDEX;
+
+// ==========================================
+// 核心订阅引擎：链接裂变拼接 (Multiplex)
+// ==========================================
+const multiplexLink = (baseLink, premiumIpRow) => {
+    const { displayIp, port, name } = parseIP(premiumIpRow.ip);
+    const nodeName = premiumIpRow.name || name || displayIp;
+
+    try {
+        if (baseLink.startsWith('vless://') || baseLink.startsWith('trojan://')) {
+            const url = new URL(baseLink);
+            const originalHost = url.hostname;
+            url.hostname = displayIp;
+            if (port && port !== 'N/A') url.port = port;
+            
+            // 直接赋值即可，URL对象会自动处理编码，避免双重编码导致客户端报错
+            url.hash = nodeName;
+            
+            if (!url.searchParams.has('host') && originalHost) url.searchParams.set('host', originalHost);
+            if (!url.searchParams.has('sni') && originalHost) url.searchParams.set('sni', originalHost);
+            return url.toString();
+        } 
+        else if (baseLink.startsWith('vmess://')) {
+            const b64 = baseLink.slice(8).replace(/-/g, '+').replace(/_/g, '/');
+            const config = JSON.parse(decodeBase64(b64));
+            if (!config.sni) config.sni = config.add;
+            if (!config.host) config.host = config.add;
+            config.add = displayIp;
+            if (port && port !== 'N/A') config.port = port;
+            config.ps = nodeName; 
+            return 'vmess://' + encodeBase64(JSON.stringify(config));
+        }
+    } catch (e) {
+        return null;
+    }
+    return null;
+};
+
+// ==========================================
+// 数据库与任务缓存管理
+// ==========================================
+const taskCache = new Map();
+const execBatches = async (db, statements) => {
+    const len = statements.length;
+    if (len === 0) return;
+    for (let i = 0; i < len; i += BATCH_SIZE) {
+        await db.batch(statements.slice(i, Math.min(i + BATCH_SIZE, len)));
+    }
+};
+
+const saveTask = async (kv, id, status, msg = '') => {
+    const data = { status, message: msg, timestamp: Date.now() };
+    taskCache.set(id, data);
+    setTimeout(() => taskCache.delete(id), TASK_TTL * 1000);
+    if (kv) await kv.put(`task:${id}`, JSON.stringify(data), { expirationTtl: TASK_TTL }).catch(() => {});
+};
+
+const getTask = async (kv, id) => {
+    const cached = taskCache.get(id);
+    if (cached) return cached;
+    if (kv) {
+        try {
+            const data = await kv.get(`task:${id}`, { type: 'json' });
+            if (data) { taskCache.set(id, data); return data; }
+        } catch {}
+    }
+    return null;
+};
+
+const invalidateCache = async (kv) => { if (kv) await kv.delete(STATS_CACHE_KEY).catch(() => {}); };
+const getCachedStats = async (kv) => {
+    if (!kv) return null;
+    try { return await kv.get(STATS_CACHE_KEY, { type: 'json' }); } catch { return null; }
+};
+const setCachedStats = async (kv, stats) => { if (kv) await kv.put(STATS_CACHE_KEY, JSON.stringify(stats), { expirationTtl: CACHE_TTL }).catch(() => {}); };
+
+const performIdReorder = async (db, sortedIds) => {
+    if (sortedIds.length === 0) return;
+    const tempStmts = sortedIds.map((id, i) => db.prepare('UPDATE ips SET id = ? WHERE id = ?').bind(-(i + 1), id));
+    const finalStmts = sortedIds.map((_, i) => db.prepare('UPDATE ips SET id = ? WHERE id = ?').bind(i + 1, -(i + 1)));
+    await execBatches(db, tempStmts);
+    await execBatches(db, finalStmts);
+};
+
+// ==========================================
+// 后台 API 实现 
+// ==========================================
+const api = {
+    async getIps(db, params) {
+        const page = Math.max(1, parseInt(params.get('page')) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(params.get('limit')) || PAGE_SIZE));
+        const offset = (page - 1) * limit;
+        const needTotal = params.get('needTotal') === 'true';
+        const keyword = params.get('keyword') || '';
+
+        let baseQuery = 'FROM ips';
+        const bindings = [];
+        if (keyword) {
+            baseQuery += ' WHERE ip LIKE ? OR name LIKE ?';
+            bindings.push(`%${keyword}%`, `%${keyword}%`);
+        }
+
+        const queries = [
+            db.prepare(`SELECT id, ip, name, active, priority ${baseQuery} ORDER BY id LIMIT ? OFFSET ?`)
+              .bind(...bindings, limit, offset)
+        ];
+
+        if (needTotal) {
+            queries.push(db.prepare(`SELECT COUNT(*) as total ${baseQuery}`).bind(...bindings));
+        }
+
+        const results = await db.batch(queries);
+        const ips = results[0].results.map(r => {
+            const { displayIp, port } = parseIP(r.ip);
+            return { ...r, displayIp, port, region: extractRegion(r.name) };
+        });
+
+        const pagination = { page, limit };
+        if (needTotal) {
+            pagination.total = results[1].results[0].total;
+            pagination.pages = Math.ceil(pagination.total / limit) || 1;
+        }
+        return json({ ips, pagination });
+    },
+    async getStats(db, kv) {
+        const cached = await getCachedStats(kv);
+        if (cached) return json(cached);
+        const { total, active } = await db.prepare('SELECT COUNT(*) as total, SUM(active) as active FROM ips').first();
+        const stats = { total, active: active || 0, inactive: total - (active || 0) };
+        await setCachedStats(kv, stats);
+        return json(stats);
+    },
+    async getTaskStatus(kv, taskId) {
+        const task = await getTask(kv, taskId);
+        return task ? json(task) : err('任务不存在或已过期', 404);
+    },
+    async addIp(db, { ip, priority }, kv) {
+        if (!ip) return err('IP不能为空');
+        const { displayIp, port, name } = parseIP(ip);
+        if (port === 'N/A') return err('IP格式错误');
+        
+        let prio = priority;
+        if (prio === undefined || prio === null) {
+            const { n } = await db.prepare('SELECT COALESCE(MAX(priority), 0) + 1 as n FROM ips').first();
+            prio = n;
+        }
+
+        const { meta } = await db.prepare('INSERT OR IGNORE INTO ips(ip, name, active, priority) VALUES(?, ?, 1, ?)')
+            .bind(`${displayIp}:${port}`, name || null, prio).run();
+
+        if (meta.changes === 0) return err('IP已存在');
+        await invalidateCache(kv);
+        return json({ success: true });
+    },
+    async batchImport(db, { ips }, ctx, kv) {
+        if (!Array.isArray(ips) || !ips.length) return err('列表为空');
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                const parsed = ips.map(ip => {
+                    const { displayIp, port, name } = parseIP(ip);
+                    return port === 'N/A' ? null : { ip: `${displayIp}:${port}`, name: name || null };
+                }).filter(Boolean);
+                if (parsed.length === 0) return await saveTask(kv, taskId, 'completed', '没有有效的IP地址');
+
+                const { p } = await db.prepare('SELECT COALESCE(MAX(priority), 0) as p FROM ips').first();
+                const stmt = db.prepare('INSERT OR IGNORE INTO ips(ip, name, active, priority) VALUES(?, ?, 1, ?)');
+                const batch = parsed.map((item, i) => stmt.bind(item.ip, item.name, p + i + 1));
+
+                await execBatches(db, batch);
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', `成功导入 ${parsed.length} 条数据`);
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId, count: ips.length });
+    },
+    async batchDelete(db, { ips }, ctx, kv) {
+        if (!Array.isArray(ips) || !ips.length) return err('列表为空');
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                const deleteIps = ips.map(line => {
+                    let targetIp = line.trim();
+                    if (targetIp.startsWith('vless://') || targetIp.startsWith('trojan://')) {
+                        try {
+                            const url = new URL(targetIp);
+                            targetIp = `${url.hostname}:${url.port || '443'}`;
+                            return targetIp;
+                        } catch(e) {}
+                    }
+                    if (targetIp.startsWith('vmess://')) {
+                        try {
+                            const b64 = targetIp.slice(8).replace(/-/g, '+').replace(/_/g, '/');
+                            const config = JSON.parse(decodeBase64(b64));
+                            targetIp = `${config.add}:${config.port || '443'}`;
+                            return targetIp;
+                        } catch(e) {}
+                    }
+                    const { displayIp, port } = parseIP(targetIp);
+                    return port === 'N/A' ? null : `${displayIp}:${port}`;
+                }).filter(Boolean);
+
+                if (deleteIps.length === 0) return await saveTask(kv, taskId, 'completed', '没有识别到有效的节点或IP进行删除');
+
+                const batch = deleteIps.map(ip => db.prepare('DELETE FROM ips WHERE ip=?').bind(ip));
+                await execBatches(db, batch);
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', `成功清理了 ${deleteIps.length} 条匹配的数据`);
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId, count: ips.length });
+    },
+    async clearAll(db, ctx, kv) {
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                await db.prepare('DELETE FROM ips').run();
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', '清空完成');
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId });
+    },
+    async toggleAll(db, { active }, ctx, kv) {
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                await db.prepare('UPDATE ips SET active = ?').bind(active ? 1 : 0).run();
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', '更新完成');
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId });
+    },
+    async updateIp(db, id, body, kv) {
+        const { active, ip, priority } = body;
+        const updates = [];
+        if (ip !== undefined) {
+            const { displayIp, port, name } = parseIP(ip);
+            updates.push(db.prepare('UPDATE ips SET ip=?, name=? WHERE id=?').bind(`${displayIp}:${port}`, name || null, id));
+        }
+        if (active !== undefined) updates.push(db.prepare('UPDATE ips SET active=? WHERE id=?').bind(active ? 1 : 0, id));
+        if (priority !== undefined) updates.push(db.prepare('UPDATE ips SET priority = ? WHERE id = ?').bind(priority, id));
+        if (updates.length > 0) { await db.batch(updates); await invalidateCache(kv); }
+        return json({ success: true });
+    },
+    async deleteIp(db, id, kv) {
+        await db.prepare('DELETE FROM ips WHERE id=?').bind(id).run();
+        await invalidateCache(kv);
+        return json({ success: true });
+    },
+    async sortIps(db, ctx, kv) {
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                const { results } = await db.prepare('SELECT id, ip, name, priority FROM ips').all();
+                const parsed = results.map(r => ({ ...r, region: extractRegion(r.name) }));
+                parsed.sort((a, b) => getRegionIndex(a.region) - getRegionIndex(b.region) || a.priority - b.priority || a.id - b.id);
+                await performIdReorder(db, parsed.map(s => s.id));
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', '排序完成');
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId });
+    },
+    async removeDuplicates(db, ctx, kv) {
+        const taskId = crypto.randomUUID();
+        ctx.waitUntil((async () => {
+            try {
+                const { results } = await db.prepare(`SELECT GROUP_CONCAT(id) as ids FROM ips GROUP BY SUBSTR(ip, 1, INSTR(ip, ':') - 1) HAVING COUNT(*) > 1`).all();
+                const deleteIds = results.flatMap(r => r.ids.split(',').map(Number).sort((a, b) => a - b).slice(1));
+                const batch = deleteIds.map(id => db.prepare('DELETE FROM ips WHERE id = ?').bind(id));
+                await execBatches(db, batch);
+                await invalidateCache(kv);
+                await saveTask(kv, taskId, 'completed', `清理了 ${deleteIds.length} 条重复数据`);
+            } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
+        })());
+        return json({ success: true, async: true, taskId });
+    }
+};
+
+const handleApiRoute = async (req, db, ctx, kv) => {
+    const url = new URL(req.url);
+    const path = url.pathname.slice(4);
+    const method = req.method;
+    try {
+        const body = (method === 'POST' || method === 'PUT') ? await req.json().catch(() => ({})) : {};
+        
+        // --- 【新增】处理短链生成的 API ---
+        if (path === '/shorten' && method === 'POST') {
+            const { longUrl } = body;
+            if (!longUrl) return err('链接不能为空');
+            // 生成 6 位随机短码
+            const shortId = Math.random().toString(36).substring(2, 8);
+            if (kv) {
+                await kv.put(`short:${shortId}`, longUrl);
+                return json({ success: true, shortId });
+            }
+            return err('未绑定 KV 空间', 500);
+        }
+
+        if (path === '/ips' && method === 'GET') return api.getIps(db, url.searchParams);
+        if (path === '/ips' && method === 'POST') return api.addIp(db, body, kv);
+        if (path === '/ips/stats') return api.getStats(db, kv);
+        if (path === '/ips/batch') return api.batchImport(db, body, ctx, kv);
+        if (path === '/ips/batch-delete') return api.batchDelete(db, body, ctx, kv);
+        if (path === '/ips/clear' && method === 'DELETE') return api.clearAll(db, ctx, kv);
+        if (path === '/ips/toggle-all') return api.toggleAll(db, body, ctx, kv);
+        if (path === '/ips/sort') return api.sortIps(db, ctx, kv);
+        if (path === '/ips/remove-duplicates') return api.removeDuplicates(db, ctx, kv);
+        if (path.startsWith('/task/')) return api.getTaskStatus(kv, path.slice(6));
+        
+        const idMatch = path.match(/^\/ips\/(\d+)$/);
+        if (idMatch) {
+            if (method === 'PUT') return api.updateIp(db, idMatch[1], body, kv);
+            if (method === 'DELETE') return api.deleteIp(db, idMatch[1], kv);
+        }
+        return new Response('Not Found', { status: 404 });
+    } catch (e) { return err(e.message, 500); }
+};
+
+// ==========================================
+// 前端 HTML: 公开生成页面 (已脱敏 + 支持短链)
+// ==========================================
+const getPublicHTML = () => `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>❤️❤️❤️红星优选</title>
+<link rel="icon" sizes="56x56" href="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/tux.png">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<style>
+body { background-color: #1a1a2e; background-image: url('https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/bioluminescence-3840x2160-15292.jpg'); background-size: cover; background-position: center; background-attachment: fixed; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: flex-start; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+.card { background: rgba(44, 44, 44, 0.7); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); padding: 40px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);margin-left: 240px; }
+.avatar { width: 80px; height: 80px; border-radius: 50%; background: #fff; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+h1 { font-size: 24px; margin-bottom: 40px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); font-style: italic; }
+.form-group { text-align: left; margin-bottom: 20px; }
+label { display: block; font-size: 14px; margin-bottom: 8px; color: #eaeaea; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+input, select { width: 100%; padding: 16px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; color: #fff; font-size: 14px; box-sizing: border-box; transition: all 0.3s ease; }
+input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); background: rgba(0, 0, 0, 0.6); }
+input::placeholder { color: #aaa; }
+select option { color: #000; background: #fff; }
+button { width: 100%; padding: 16px; background: rgba(30, 58, 138, 0.85); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; backdrop-filter: blur(5px); }
+button:hover { background: rgba(29, 78, 216, 0.95); transform: translateY(-1px); }
+button:disabled { opacity: 0.7; cursor: not-allowed; }
+.footer { margin-top: 30px; font-size: 12px; color: #bbb; line-height: 1.6; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+.tg-link { color: #58a6ff; text-decoration: none; font-weight: bold; transition: color 0.2s; }
+.tg-link:hover { color: #79c0ff; text-decoration: underline; }
+#qrWrap { display: none; justify-content: center; margin-top: 25px; animation: fadeIn 0.5s ease; }
+#qrCodeBox { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div class="card">
+    <div class="avatar"><img src="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/tux.png" alt="Logo"></div>
+    <h1>红星闪闪❤️❤️❤️优选订阅</h1>
+    
+    <div class="form-group">
+        <label>基础节点链接</label>
+        <input type="text" id="nodeLink" placeholder="请输入 VMess / VLESS / Trojan 链接" autocomplete="off">
+    </div>
+
+    <div class="form-group">
+        <label>优选 IP 来源</label>
+        <select id="ipSource" onchange="toggleExtInput()">
+            <option value="local">本地私有优选库 (高稳定)</option>
+            <option value="ext">外部公开优选库 (实时拉取)</option>
+        </select>
+    </div>
+
+    <div class="form-group" id="extUrlGroup" style="display: none;">
+        <label>外部优选库接口 (API 或 TXT)</label>
+        <select id="extUrlSelect" onchange="document.getElementById('extUrl').value = this.value" style="margin-bottom: 8px;">
+            <option value="https://cf.junzhen.qzz.io/best_ips_bj.txt">📶 动态测速 API - 电信优先</option>
+            <option value="https://cf.junzhen.qzz.io/best_ips.txt">📶 动态测速 API - 联通优先</option>
+            <option value="https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/best_ips.txt">📶 动态测速 API - 移动优先</option>
+            <option value="https://bestcf.pages.dev/luoli/all.txt">🌐 动态测速 API - 通用官方</option>
+            <option value="https://raw.githubusercontent.com/cmliu/WorkerVless2sub/main/addressesapi.txt">📦 静态 TXT 库 - cmliu (备用)</option>
+            <option value="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/addressesapi.txt">📦 红星优选库 (主力)</option>
+            <option value="">✍️ 自定义：清空并手动输入链接...</option>
+        </select>
+        <input type="text" id="extUrl" placeholder="请选择上方接口或粘贴你的链接..." value="https://api.example.com/ct?ips=6" autocomplete="off">
+    </div>
+
+    <div class="form-group">
+        <label>
+            安全 Token (必填!)
+            <a href="https://t.me/xiagefei" target="_blank" style="font-size: 12px; color: #58a6ff; font-weight: normal; margin-left: 8px; text-decoration: none;">(前往获取)</a>
+        </label>
+        <input type="password" id="subToken" placeholder="防止接口被他人滥用生成订阅, 请输入" autocomplete="off">
+    </div>
+
+    <button onclick="generateSub()" id="genBtn" style="margin-top:10px;">生成优选短链</button>
+    
+    <div class="form-group" style="margin-top: 20px;">
+        <label>您的专属订阅 ❗</label>
+        <input type="text" id="subResult" placeholder="点击生成后自动出现" readonly onclick="copyLink()">
+    </div>
+    
+    <div id="qrWrap">
+        <div id="qrCodeBox"></div>
+    </div>
+
+    <div class="footer">
+        支持: <a href="https://t.me/xiagefei" target="_blank" class="tg-link">加入tg群组获取最新动态</a> - 由 XiaGeFei 提供维护 &copy; 2026
+    </div>
+</div>
+<script>
+function toggleExtInput() {
+    const val = document.getElementById('ipSource').value;
+    document.getElementById('extUrlGroup').style.display = val === 'ext' ? 'block' : 'none';
 }
 
-async function nginx() {
-	const text = `
-	<!DOCTYPE html>
-	<html>
-	<head>
-	<title>Welcome to nginx!</title>
-	<style>
-		body {
-			width: 35em;
-			margin: 0 auto;
-			font-family: Tahoma, Verdana, Arial, sans-serif;
-		}
-	</style>
-	</head>
-	<body>
-	<h1>Welcome to nginx!</h1>
-	<p>If you see this page, the nginx web server is successfully installed and
-	working. Further configuration is required.</p>
-	
-	<p>For online documentation and support please refer to
-	<a href="http://nginx.org/">nginx.org</a>.<br/>
-	Commercial support is available at
-	<a href="http://nginx.com/">nginx.com</a>.</p>
-	
-	<p><em>Thank you for using nginx.</em></p>
-	</body>
-	</html>
-	`
-	return text;
+async function generateSub() {
+    const link = document.getElementById('nodeLink').value.trim();
+    const token = document.getElementById('subToken').value.trim();
+    const source = document.getElementById('ipSource').value;
+    const extUrl = document.getElementById('extUrl').value.trim();
+
+    if (!link) { alert('哎呀，你还没有填入节点链接哦！'); return; }
+    if (source === 'ext' && !extUrl) { alert('请填写外部优选链接！'); return; }
+
+    const btn = document.getElementById('genBtn');
+    btn.innerText = "生成中..."; btn.style.opacity = "0.7";
+    btn.disabled = true;
+    
+    // 1. 拼接原有的参数
+    let subParams = '/sub?base=' + encodeURIComponent(link);
+    if(token) subParams += '&token=' + encodeURIComponent(token);
+    if(source === 'ext') subParams += '&source=ext&ext_url=' + encodeURIComponent(extUrl);
+    
+    try {
+        // 2. 调用 API 生成短链
+        const res = await fetch('/api/shorten', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ longUrl: subParams })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            // 3. 组装最终的短链显示给用户
+            const shortUrl = window.location.origin + '/s/' + data.shortId;
+            document.getElementById('subResult').value = shortUrl;
+            
+            // 生成二维码
+            const qrWrap = document.getElementById('qrWrap');
+            const qrCodeBox = document.getElementById('qrCodeBox');
+            qrCodeBox.innerHTML = ''; 
+            qrWrap.style.display = 'flex'; 
+            
+            new QRCode(qrCodeBox, {
+                text: shortUrl, width: 180, height: 180,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+        } else {
+            alert('生成短链失败: ' + (data.error || '未知错误'));
+            document.getElementById('subResult').value = window.location.origin + subParams; // 降级显示长链
+        }
+    } catch (e) {
+        alert('网络请求失败，请检查控制台。');
+        document.getElementById('subResult').value = window.location.origin + subParams; // 降级显示长链
+    } finally {
+        btn.innerText = "生成优选短链"; 
+        btn.style.opacity = "1";
+        btn.disabled = false;
+    }
 }
 
-async function sendMessage(type, ip, add_data = "") {
-	if (BotToken !== '' && ChatID !== '') {
-		let msg = "";
-		const response = await fetch(`http://ip-api.com/json/${ip}?lang=zh-CN`);
-		if (response.status == 200) {
-			const ipInfo = await response.json();
-			msg = `${type}\nIP: ${ip}\n国家: ${ipInfo.country}\n<tg-spoiler>城市: ${ipInfo.city}\n组织: ${ipInfo.org}\nASN: ${ipInfo.as}\n${add_data}`;
-		} else {
-			msg = `${type}\nIP: ${ip}\n<tg-spoiler>${add_data}`;
-		}
-
-		let url = "https://api.telegram.org/bot" + BotToken + "/sendMessage?chat_id=" + ChatID + "&parse_mode=HTML&text=" + encodeURIComponent(msg);
-		return fetch(url, {
-			method: 'get',
-			headers: {
-				'Accept': 'text/html,application/xhtml+xml,application/xml;',
-				'Accept-Encoding': 'gzip, deflate, br',
-				'User-Agent': 'Mozilla/5.0 Chrome/90.0.4430.72'
-			}
-		});
-	}
+function copyLink() {
+    const res = document.getElementById('subResult');
+    if(res.value) { res.select(); document.execCommand('copy'); alert('✅ 订阅链接已复制！快去客户端添加吧。'); }
 }
+</script>
+</body>
+</html>`;
 
-function base64Decode(str) {
-	const bytes = new Uint8Array(atob(str).split('').map(c => c.charCodeAt(0)));
-	const decoder = new TextDecoder('utf-8');
-	return decoder.decode(bytes);
+// ==========================================
+// 前端 HTML: 后台优选 IP 管理面板
+// ==========================================
+const getAdminHTML = () => `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>优选 IP 管理后台</title>
+<style>
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--fg:#e6edf3;--fg2:#b3bac4;--fg3:#8b949e;--border:#30363d;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--purple:#a371f7;--orange:#db6d28;--radius:12px;}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font:15px/1.6 sans-serif;background:var(--bg);color:var(--fg);min-height:100vh}
+.container{max-width:1200px;margin:0 auto;padding:30px 24px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}
+h1{font-size:32px;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;color:transparent; margin:0;}
+.back-btn { color: var(--blue); text-decoration: none; font-weight: bold; }
+.section{background:var(--bg2);border-radius:var(--radius);padding:24px;margin-bottom:24px;border:1px solid var(--border)}
+h2{font-size:18px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
+h2::before{content:'';width:4px;height:16px;background:var(--blue);border-radius:2px}
+.stats{display:flex;gap:16px;margin-bottom:24px}
+.stat{flex:1;background:var(--bg3);padding:20px;border-radius:var(--radius);text-align:center;border:1px solid var(--border)}
+.stat-num{font-size:28px;font-weight:bold;color:var(--blue)}
+input,textarea{width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);margin-bottom:16px}
+input:focus,textarea:focus{outline:none;border-color:var(--blue);}
+button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:bold;margin-right:8px;margin-bottom:8px;transition: opacity 0.2s;}
+button:hover{opacity: 0.8;}
+button:disabled{opacity: 0.5; cursor: not-allowed;}
+button.danger{background:var(--red)}
+button.sec{background:var(--bg3);color:var(--fg)}
+button.page-btn{padding:8px 14px; margin:0;}
+button.page-btn.active{background:var(--blue); color:#fff; cursor:default; opacity:1;}
+.ip-list{list-style:none;}
+.ip-item{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg3);border:1px solid var(--border);margin-bottom:8px;border-radius:8px; flex-wrap: wrap; gap: 10px;}
+.ip-address { font-family:monospace; font-size:16px; color:var(--fg); word-break: break-all; } 
+.ip-meta{font-size:13px;color:var(--fg2);margin-top:4px}
+.tag{background:rgba(88,166,255,0.1);color:var(--blue);padding:2px 8px;border-radius:4px;font-size:12px;margin-right:6px}
+.action-buttons{display: flex; gap: 8px; flex-wrap: wrap; align-items: center;}
+.status-text.active { color: var(--green); }
+.status-text.inactive { color: var(--red); }
+.search-box { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
+.search-box input { margin-bottom:0; flex:1; min-width:200px; }
+.page-badge { color:var(--fg2); font-size:14px; background:var(--bg3); padding:6px 14px; border-radius:20px; border:1px solid var(--border); }
+
+@media (max-width: 768px) {
+    .container { padding: 15px 12px; }
+    .header { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
+    .ip-item { flex-direction: column; align-items: flex-start; }
+    .action-buttons button, .search-box button { width: 100%; margin-right: 0; }
+    .action-buttons { flex-direction: column; width: 100%; }
+    #pagination { gap: 4px; }
+    .page-btn { padding: 6px 10px; }
 }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>优选 IP 库管理</h1>
+        <a href="/" class="back-btn">&larr; 返回首页</a>
+    </div>
 
-async function MD5MD5(text) {
-	const encoder = new TextEncoder();
+    <div class="stats">
+        <div class="stat"><div class="stat-num" id="total">-</div><div>总优选IP</div></div>
+        <div class="stat"><div class="stat-num" id="active">-</div><div>活跃中</div></div>
+    </div>
 
-	const firstPass = await crypto.subtle.digest('MD5', encoder.encode(text));
-	const firstPassArray = Array.from(new Uint8Array(firstPass));
-	const firstHex = firstPassArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    <div class="section">
+        <h2>批量添加 / 删除指定 IP</h2>
+        <textarea id="batchIps" rows="5" placeholder="格式: IP:端口#国家 (例如 104.16.2.3:443#美国)&#10;每行一个。删除指定IP时只需粘贴要删的IP或完整节点链接即可。"></textarea>
+        <div class="action-buttons">
+            <button onclick="batchImport()">批量导入</button>
+            <button class="danger" onclick="batchDelete()">删除指定IP</button>
+            <button class="danger" style="background:#8b0000;" onclick="clearAll()">清空全部数据</button>
+        </div>
+    </div>
 
-	const secondPass = await crypto.subtle.digest('MD5', encoder.encode(firstHex.slice(7, 27)));
-	const secondPassArray = Array.from(new Uint8Array(secondPass));
-	const secondHex = secondPassArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    <div class="section">
+        <h2>操作面板与搜索</h2>
+        <div class="search-box">
+            <input id="searchInput" placeholder="无需回车，输入内容自动搜索...">
+            <button class="sec" style="margin-bottom:0;" onclick="clearSearch()">显示全部</button>
+        </div>
+        <div class="action-buttons" style="flex-direction:row;">
+            <button class="sec" onclick="sortIps()">按地区排序</button>
+            <button class="sec" onclick="removeDuplicates()">清理重复IP</button>
+            <button class="sec" style="color:var(--green)" onclick="toggleAll(1)">全部启用</button>
+            <button class="sec" style="color:var(--red)" onclick="toggleAll(0)">全部禁用</button>
+        </div>
+        <div id="msg" style="color:var(--green);margin-top:10px;font-weight:bold"></div>
+    </div>
 
-	return secondHex.toLowerCase();
-}
+    <div class="section">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+            <h2 style="margin:0;">IP 列表</h2>
+            <div class="page-badge">第 <strong id="page" style="color:var(--blue)">1</strong> 页 / 共 <strong id="totalPages" style="color:var(--blue)">1</strong> 页</div>
+        </div>
+        <div class="ip-list" id="list">加载中...</div>
+        <div id="pagination" style="margin-top:24px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap; align-items:center;"></div>
+    </div>
+</div>
 
-function clashFix(content) {
-	if (content.includes('wireguard') && !content.includes('remote-dns-resolve')) {
-		let lines;
-		if (content.includes('\r\n')) {
-			lines = content.split('\r\n');
-		} else {
-			lines = content.split('\n');
-		}
+<div id="editModal" style="display:none; position:fixed; inset:0; background:rgba(13,17,23,0.8); align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(4px);">
+    <div style="background:var(--bg2); border-radius:var(--radius); padding:24px; width:100%; max-width:400px; border:1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.5);">
+        <h2 style="margin-top:0; color:var(--fg); font-size:20px;">编辑节点信息</h2>
+        <input id="editId" type="hidden">
+        
+        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">IP 和 端口</label>
+        <input id="editIp" placeholder="例如 104.16.2.3:443" style="margin-bottom:16px;">
+        
+        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">备注名称</label>
+        <input id="editName" placeholder="例如 香港优选 (选填)" style="margin-bottom:16px;">
+        
+        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">排序权重 (越小越靠前，置顶可填 0 或 -1)</label>
+        <input id="editPriority" type="number" placeholder="数字越小越靠前" style="margin-bottom:8px;">
 
-		let result = "";
-		for (let line of lines) {
-			if (line.includes('type: wireguard')) {
-				const 备改内容 = `, mtu: 1280, udp: true`;
-				const 正确内容 = `, mtu: 1280, remote-dns-resolve: true, udp: true`;
-				result += line.replace(new RegExp(备改内容, 'g'), 正确内容) + '\n';
-			} else {
-				result += line + '\n';
-			}
-		}
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button style="flex:1;" onclick="saveEdit()">保存修改</button>
+            <button style="flex:1;" class="sec" onclick="closeEdit()">取消</button>
+        </div>
+    </div>
+</div>
 
-		content = result;
-	}
-	return content;
-}
+<script>
+let page = 1;
+let totalPages = 1;
+let currentKeyword = '';
+let searchTimeout = null;
 
-async function proxyURL(proxyURL, url) {
-	const URLs = await ADD(proxyURL);
-	const fullURL = URLs[Math.floor(Math.random() * URLs.length)];
+const $ = id => document.getElementById(id);
+const msg = t => { $('msg').innerText = t; setTimeout(() => $('msg').innerText='', 3000) };
+const api = async (p, o={}) => { const r = await fetch('/api'+p, {headers:{'Content-Type':'application/json'}, ...o}); return r.json(); };
 
-	// 解析目标 URL
-	let parsedURL = new URL(fullURL);
-	console.log(parsedURL);
-	// 提取并可能修改 URL 组件
-	let URLProtocol = parsedURL.protocol.slice(0, -1) || 'https';
-	let URLHostname = parsedURL.hostname;
-	let URLPathname = parsedURL.pathname;
-	let URLSearch = parsedURL.search;
+$('searchInput').addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => { currentKeyword = e.target.value.trim(); page = 1; load(); }, 500); 
+});
 
-	// 处理 pathname
-	if (URLPathname.charAt(URLPathname.length - 1) == '/') {
-		URLPathname = URLPathname.slice(0, -1);
-	}
-	URLPathname += url.pathname;
+const clearSearch = () => { $('searchInput').value = ''; currentKeyword = ''; page = 1; load(); };
 
-	// 构建新的 URL
-	let newURL = `${URLProtocol}://${URLHostname}${URLPathname}${URLSearch}`;
+const load = async () => {
+    const query = new URLSearchParams({ page, needTotal: 'true' });
+    if (currentKeyword) query.append('keyword', currentKeyword);
 
-	// 反向代理请求
-	let response = await fetch(newURL);
+    const [stats, res] = await Promise.all([api('/ips/stats'), api('/ips?' + query.toString())]);
+    
+    $('total').innerText = stats.total; $('active').innerText = stats.active;
+    totalPages = res.pagination.pages || 1;
+    $('page').innerText = page; $('totalPages').innerText = totalPages;
 
-	// 创建新的响应
-	let newResponse = new Response(response.body, {
-		status: response.status,
-		statusText: response.statusText,
-		headers: response.headers
-	});
+    $('list').innerHTML = res.ips.map(ip => \`
+        <li class="ip-item">
+            <div>
+                <div class="ip-address">\${ip.displayIp}:\${ip.port}</div>
+                <div class="ip-meta">
+                    \${ip.name ? '<span class="tag">'+ip.name+'</span>' : ''}
+                    状态: <span class="status-text \${ip.active ? 'active' : 'inactive'}">\${ip.active?'启用中':'已禁用'}</span>
+                </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; width:100%; justify-content: flex-end;">
+                <button class="sec" onclick="openEdit(\${ip.id}, '\${ip.displayIp}', '\${ip.port}', '\${ip.name || ''}', \${ip.priority || 0})">编辑</button>
+                <button class="sec" onclick="toggleIp(\${ip.id}, \${ip.active})">\${ip.active?'禁用':'启用'}</button>
+                <button class="danger" onclick="del(\${ip.id})">删除</button>
+            </div>
+        </li>
+    \`).join('') || '<div style="text-align:center; color:var(--fg2); padding:30px;">'+(currentKeyword?'没有搜索到匹配的节点':'暂无数据')+'</div>';
+    
+    renderPagination();
+};
 
-	// 添加自定义头部，包含 URL 信息
-	//newResponse.headers.set('X-Proxied-By', 'Cloudflare Worker');
-	//newResponse.headers.set('X-Original-URL', fullURL);
-	newResponse.headers.set('X-New-URL', newURL);
+const renderPagination = () => {
+    let html = \`<button class="sec page-btn" \${page === 1 ? 'disabled' : \`onclick="goToPage(\${page-1})"\`}>上一页</button>\`;
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, page + 2);
+    if (start > 1) {
+        html += \`<button class="sec page-btn" onclick="goToPage(1)">1</button>\`;
+        if (start > 2) html += \`<span style="color:var(--fg2); padding:0 4px;">...</span>\`;
+    }
+    for (let i = start; i <= end; i++) {
+        if (i === page) html += \`<button class="page-btn active">\${i}</button>\`;
+        else html += \`<button class="sec page-btn" onclick="goToPage(\${i})">\${i}</button>\`;
+    }
+    if (end < totalPages) {
+        if (end < totalPages - 1) html += \`<span style="color:var(--fg2); padding:0 4px;">...</span>\`;
+        html += \`<button class="sec page-btn" onclick="goToPage(\${totalPages})">\${totalPages}</button>\`;
+    }
+    html += \`<button class="sec page-btn" \${page === totalPages ? 'disabled' : \`onclick="goToPage(\${page+1})"\`}>下一页</button>\`;
+    $('pagination').innerHTML = html;
+};
 
-	return newResponse;
-}
+const goToPage = (p) => { page = p; load(); };
+const poll = (id, cb) => {
+    const t = setInterval(async () => {
+        const res = await api('/task/'+id);
+        if(res.status === 'completed' || res.status === 'failed') {
+            clearInterval(t); msg(res.message); cb();
+        }
+    }, 1000);
+};
 
-async function getSUB(api, request, 追加UA, userAgentHeader) {
-	if (!api || api.length === 0) {
-		return [];
-	} else api = [...new Set(api)]; // 去重
-	let newapi = "";
-	let 订阅转换URLs = "";
-	let 异常订阅 = "";
-	const controller = new AbortController(); // 创建一个AbortController实例，用于取消请求
-	const timeout = setTimeout(() => {
-		controller.abort(); // 2秒后取消所有请求
-	}, 2000);
+const toggleIp = async (id, currentStatus) => { await api('/ips/'+id, {method:'PUT', body:JSON.stringify({active: currentStatus ? 0 : 1})}); load(); };
+const openEdit = (id, ip, port, name, priority) => { 
+    $('editId').value = id; 
+    $('editIp').value = ip + ':' + port; 
+    $('editName').value = name; 
+    $('editPriority').value = priority; // 新增：将权重回显到输入框
+    $('editModal').style.display = 'flex'; 
+};
+const closeEdit = () => { $('editModal').style.display = 'none'; };
+const saveEdit = async () => {
+    const id = $('editId').value;
+    const ipStr = $('editIp').value.trim();
+    const nameStr = $('editName').value.trim();
+    const priorityVal = parseInt($('editPriority').value); // 读取权重输入框的值
 
-	try {
-		// 使用Promise.allSettled等待所有API请求完成，无论成功或失败
-		const responses = await Promise.allSettled(api.map(apiUrl => getUrl(request, apiUrl, 追加UA, userAgentHeader).then(response => response.ok ? response.text() : Promise.reject(response))));
+    if(!ipStr) return msg('IP不能为空');
+    let fullIP = ipStr; if(nameStr) fullIP += '#' + nameStr;
 
-		// 遍历所有响应
-		const modifiedResponses = responses.map((response, index) => {
-			// 检查是否请求成功
-			if (response.status === 'rejected') {
-				const reason = response.reason;
-				if (reason && reason.name === 'AbortError') {
-					return {
-						status: '超时',
-						value: null,
-						apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
-					};
-				}
-				console.error(`请求失败: ${api[index]}, 错误信息: ${reason.status} ${reason.statusText}`);
-				return {
-					status: '请求失败',
-					value: null,
-					apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
-				};
-			}
-			return {
-				status: response.status,
-				value: response.value,
-				apiUrl: api[index] // 将原始的apiUrl添加到返回对象中
-			};
-		});
+    // 构造发送给后端的数据包
+    const updateBody = { ip: fullIP };
+    if (!isNaN(priorityVal)) updateBody.priority = priorityVal; 
 
-		console.log(modifiedResponses); // 输出修改后的响应数组
+    try { 
+        await api('/ips/'+id, {method:'PUT', body:JSON.stringify(updateBody)}); 
+        msg('修改成功'); 
+        closeEdit(); 
+        load(); 
+    } catch(e) { 
+        msg('修改失败，格式错误'); 
+    }
+};
+const del = async (id) => { if(confirm('确定要彻底删除此IP吗？')) { await api('/ips/'+id, {method:'DELETE'}); load(); } };
 
-		for (const response of modifiedResponses) {
-			// 检查响应状态是否为'fulfilled'
-			if (response.status === 'fulfilled') {
-				const content = await response.value || 'null'; // 获取响应的内容
-				if (content.includes('proxies:')) {
-					//console.log('Clash订阅: ' + response.apiUrl);
-					订阅转换URLs += "|" + response.apiUrl; // Clash 配置
-				} else if (content.includes('outbounds"') && content.includes('inbounds"')) {
-					//console.log('Singbox订阅: ' + response.apiUrl);
-					订阅转换URLs += "|" + response.apiUrl; // Singbox 配置
-				} else if (content.includes('://')) {
-					//console.log('明文订阅: ' + response.apiUrl);
-					newapi += content + '\n'; // 追加内容
-				} else if (isValidBase64(content)) {
-					//console.log('Base64订阅: ' + response.apiUrl);
-					newapi += base64Decode(content) + '\n'; // 解码并追加内容
-				} else {
-					const 异常订阅LINK = `trojan://CMLiussss@127.0.0.1:8888?security=tls&allowInsecure=1&type=tcp&headerType=none#%E5%BC%82%E5%B8%B8%E8%AE%A2%E9%98%85%20${response.apiUrl.split('://')[1].split('/')[0]}`;
-					console.log('异常订阅: ' + 异常订阅LINK);
-					异常订阅 += `${异常订阅LINK}\n`;
-				}
-			}
-		}
-	} catch (error) {
-		console.error(error); // 捕获并输出错误信息
-	} finally {
-		clearTimeout(timeout); // 清除定时器
-	}
+const toggleAll = async (active) => { if(!confirm(active ? '确定将所有节点设为启用吗？' : '确定将所有节点设为禁用吗？')) return; const res = await api('/ips/toggle-all', {method:'POST', body:JSON.stringify({active})}); msg('操作执行中...'); poll(res.taskId, load); };
+const batchImport = async () => { const ips = $('batchIps').value.split('\\n').filter(Boolean); if(!ips.length) { msg('请先在输入框填写 IP'); return; } const res = await api('/ips/batch', {method:'POST', body:JSON.stringify({ips})}); msg('导入任务已启动...'); $('batchIps').value = ''; poll(res.taskId, load); };
+const batchDelete = async () => { const ips = $('batchIps').value.split('\\n').filter(Boolean); if(!ips.length) { msg('请先在输入框填写要删除的 IP 或节点链接'); return; } if(!confirm('确定要删除上面填写的节点对应的 IP 吗？')) return; const res = await api('/ips/batch-delete', {method:'POST', body:JSON.stringify({ips})}); msg('批量删除任务已启动...'); $('batchIps').value = ''; poll(res.taskId, load); };
+const clearAll = async () => { if(!confirm('警告：确定清空所有优选IP吗？此操作不可逆！')) return; const res = await api('/ips/clear', {method:'DELETE'}); msg('清空任务启动...'); poll(res.taskId, () => { page=1; load(); }); };
+const sortIps = async () => { const res = await api('/ips/sort', {method:'POST'}); msg('排序中...'); poll(res.taskId, load); };
+const removeDuplicates = async () => { const res = await api('/ips/remove-duplicates', {method:'POST'}); msg('去重中...'); poll(res.taskId, load); };
 
-	const 订阅内容 = await ADD(newapi + 异常订阅); // 将处理后的内容转换为数组
-	// 返回处理后的结果
-	return [订阅内容, 订阅转换URLs];
-}
+$('editModal').onclick = (e) => { if(e.target === $('editModal')) closeEdit(); };
+load();
+</script>
+</body>
+</html>`;
 
-async function getUrl(request, targetUrl, 追加UA, userAgentHeader) {
-	// 设置自定义 User-Agent
-	const newHeaders = new Headers(request.headers);
-	newHeaders.set("User-Agent", `${atob('djJyYXlOLzYuNDU=')} cmliu/CF-Workers-SUB ${追加UA}(${userAgentHeader})`);
+// ==========================================
+// 密码验证核心逻辑 (Basic Auth)
+// ==========================================
+const checkAuth = (req, env) => {
+    const expectedPassword = env.ADMIN_PASSWORD;
+    if (!expectedPassword) return true;
 
-	// 构建新的请求对象
-	const modifiedRequest = new Request(targetUrl, {
-		method: request.method,
-		headers: newHeaders,
-		body: request.method === "GET" ? null : request.body,
-		redirect: "follow",
-		cf: {
-			// 忽略SSL证书验证
-			insecureSkipVerify: true,
-			// 允许自签名证书
-			allowUntrusted: true,
-			// 禁用证书验证
-			validateCertificate: false
-		}
-	});
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) return false;
 
-	// 输出请求的详细信息
-	console.log(`请求URL: ${targetUrl}`);
-	console.log(`请求头: ${JSON.stringify([...newHeaders])}`);
-	console.log(`请求方法: ${request.method}`);
-	console.log(`请求体: ${request.method === "GET" ? null : request.body}`);
+    const [scheme, encoded] = authHeader.split(' ');
+    if (scheme !== 'Basic' || !encoded) return false;
 
-	// 发送请求并返回响应
-	return fetch(modifiedRequest);
-}
+    try {
+        const decoded = atob(encoded);
+        const [username, password] = decoded.split(':');
+        if (password === expectedPassword) return true;
+    } catch (e) {
+        return false;
+    }
+    return false;
+};
 
-function isValidBase64(str) {
-	// 先移除所有空白字符(空格、换行、回车等)
-	const cleanStr = str.replace(/\s/g, '');
-	const base64Regex = /^[A-Za-z0-9+/=]+$/;
-	return base64Regex.test(cleanStr);
-}
+// ==========================================
+// 主路由引擎
+// ==========================================
+export default {
+    async fetch(req, env, ctx) {
+        const url = new URL(req.url);
+        const path = url.pathname;
 
-async function 迁移地址列表(env, txt = 'ADD.txt') {
-	const 旧数据 = await env.KV.get(`/${txt}`);
-	const 新数据 = await env.KV.get(txt);
+        // --- 【新增】处理短链跳转 (公开接口，无密码拦截) ---
+        if (path.startsWith('/s/')) {
+            const shortId = path.slice(3); // 截取 /s/ 后面的字符
+            if (env.TASK_KV) {
+                const longUrl = await env.TASK_KV.get(`short:${shortId}`);
+                if (longUrl) {
+                    // 使用 302 重定向到真实的 /sub 长链接，并将原长链自动拼在域名后
+                    return Response.redirect(new URL(longUrl, url.origin).toString(), 302);
+                }
+            }
+            return new Response('❌ 短链接无效或已过期', { status: 404, headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+        }
 
-	if (旧数据 && !新数据) {
-		// 写入新位置
-		await env.KV.put(txt, 旧数据);
-		// 删除旧数据
-		await env.KV.delete(`/${txt}`);
-		return true;
-	}
-	return false;
-}
+        // 安全拦截区
+        if (path === '/admin' || path.startsWith('/api/')) {
+            // 放行公开的 /api/shorten 接口，避免前端无法生成短链
+            if (path !== '/api/shorten' && !checkAuth(req, env)) {
+                return new Response('Unauthorized', {
+                    status: 401,
+                    headers: { 'WWW-Authenticate': 'Basic realm="Admin Access Requires Password"' }
+                });
+            }
+        }
 
-async function KV(request, env, txt = 'ADD.txt', guest) {
-	const url = new URL(request.url);
-	try {
-		// POST请求处理
-		if (request.method === "POST") {
-			if (!env.KV) return new Response("未绑定KV空间", { status: 400 });
-			try {
-				const content = await request.text();
-				await env.KV.put(txt, content);
-				return new Response("保存成功");
-			} catch (error) {
-				console.error('保存KV时发生错误:', error);
-				return new Response("保存失败: " + error.message, { status: 500 });
-			}
-		}
+        if (path === '/') {
+            return new Response(getPublicHTML(), {
+                headers: { 'Content-Type': 'text/html;charset=utf-8' }
+            });
+        }
 
-		// GET请求部分
-		let content = '';
-		let hasKV = !!env.KV;
+        if (path === '/admin') {
+            return new Response(getAdminHTML(), {
+                headers: { 'Content-Type': 'text/html;charset=utf-8' }
+            });
+        }
 
-		if (hasKV) {
-			try {
-				content = await env.KV.get(txt) || '';
-			} catch (error) {
-				console.error('读取KV时发生错误:', error);
-				content = '读取数据时发生错误: ' + error.message;
-			}
-		}
+        // --- /sub 接口：终极防爆修复版 ---
+        if (path === '/sub') {
+            const baseLink = url.searchParams.get('base');
+            const reqToken = url.searchParams.get('token');
+            const source = url.searchParams.get('source'); 
+            const extUrl = url.searchParams.get('ext_url');
 
-		const html = `
-			<!DOCTYPE html>
-			<html>
-				<head>
-					<title>${FileName} 订阅编辑</title>
-					<meta charset="utf-8">
-					<meta name="viewport" content="width=device-width, initial-scale=1">
-					<style>
-						body {
-							margin: 0;
-							padding: 15px; /* 调整padding */
-							box-sizing: border-box;
-							font-size: 13px; /* 设置全局字体大小 */
-						}
-						.editor-container {
-							width: 100%;
-							max-width: 100%;
-							margin: 0 auto;
-						}
-						.editor {
-							width: 100%;
-							height: 300px; /* 调整高度 */
-							margin: 15px 0; /* 调整margin */
-							padding: 10px; /* 调整padding */
-							box-sizing: border-box;
-							border: 1px solid #ccc;
-							border-radius: 4px;
-							font-size: 13px;
-							line-height: 1.5;
-							overflow-y: auto;
-							resize: none;
-						}
-						.save-container {
-							margin-top: 8px; /* 调整margin */
-							display: flex;
-							align-items: center;
-							gap: 10px; /* 调整gap */
-						}
-						.save-btn, .back-btn {
-							padding: 6px 15px; /* 调整padding */
-							color: white;
-							border: none;
-							border-radius: 4px;
-							cursor: pointer;
-						}
-						.save-btn {
-							background: #4CAF50;
-						}
-						.save-btn:hover {
-							background: #45a049;
-						}
-						.back-btn {
-							background: #666;
-						}
-						.back-btn:hover {
-							background: #555;
-						}
-						.save-status {
-							color: #666;
-						}
-					</style>
-					<script src="https://cdn.jsdelivr.net/npm/@keeex/qrcodejs-kx@1.0.2/qrcode.min.js"></script>
-				</head>
-				<body>
-					################################################################<br>
-					Subscribe / sub 订阅地址, 点击链接自动 <strong>复制订阅链接</strong> 并 <strong>生成订阅二维码</strong> <br>
-					---------------------------------------------------------------<br>
-					自适应订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?sub','qrcode_0')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}</a><br>
-					<div id="qrcode_0" style="margin: 10px 10px 10px 10px;"></div>
-					Base64订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?b64','qrcode_1')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}?b64</a><br>
-					<div id="qrcode_1" style="margin: 10px 10px 10px 10px;"></div>
-					clash订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?clash','qrcode_2')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}?clash</a><br>
-					<div id="qrcode_2" style="margin: 10px 10px 10px 10px;"></div>
-					singbox订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?sb','qrcode_3')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}?sb</a><br>
-					<div id="qrcode_3" style="margin: 10px 10px 10px 10px;"></div>
-					surge订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?surge','qrcode_4')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}?surge</a><br>
-					<div id="qrcode_4" style="margin: 10px 10px 10px 10px;"></div>
-					loon订阅地址:<br>
-					<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/${mytoken}?loon','qrcode_5')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/${mytoken}?loon</a><br>
-					<div id="qrcode_5" style="margin: 10px 10px 10px 10px;"></div>
-					&nbsp;&nbsp;<strong><a href="javascript:void(0);" id="noticeToggle" onclick="toggleNotice()">查看访客订阅∨</a></strong><br>
-					<div id="noticeContent" class="notice-content" style="display: none;">
-						---------------------------------------------------------------<br>
-						访客订阅只能使用订阅功能，无法查看配置页！<br>
-						GUEST（访客订阅TOKEN）: <strong>${guest}</strong><br>
-						---------------------------------------------------------------<br>
-						自适应订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}','guest_0')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}</a><br>
-						<div id="guest_0" style="margin: 10px 10px 10px 10px;"></div>
-						Base64订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}&b64','guest_1')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}&b64</a><br>
-						<div id="guest_1" style="margin: 10px 10px 10px 10px;"></div>
-						clash订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}&clash','guest_2')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}&clash</a><br>
-						<div id="guest_2" style="margin: 10px 10px 10px 10px;"></div>
-						singbox订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}&sb','guest_3')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}&sb</a><br>
-						<div id="guest_3" style="margin: 10px 10px 10px 10px;"></div>
-						surge订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}&surge','guest_4')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}&surge</a><br>
-						<div id="guest_4" style="margin: 10px 10px 10px 10px;"></div>
-						loon订阅地址:<br>
-						<a href="javascript:void(0)" onclick="copyToClipboard('https://${url.hostname}/sub?token=${guest}&loon','guest_5')" style="color:blue;text-decoration:underline;cursor:pointer;">https://${url.hostname}/sub?token=${guest}&loon</a><br>
-						<div id="guest_5" style="margin: 10px 10px 10px 10px;"></div>
-					</div>
-					---------------------------------------------------------------<br>
-					################################################################<br>
-					订阅转换配置<br>
-					---------------------------------------------------------------<br>
-					SUBAPI（订阅转换后端）: <strong>${subProtocol}://${subConverter}</strong><br>
-					SUBCONFIG（订阅转换配置文件）: <strong>${subConfig}</strong><br>
-					---------------------------------------------------------------<br>
-					################################################################<br>
-					${FileName} 汇聚订阅编辑: 
-					<div class="editor-container">
-						${hasKV ? `
-						<textarea class="editor" 
-							placeholder="${decodeURIComponent(atob('TElOSyVFNyVBNCVCQSVFNCVCRSU4QiVFRiVCQyU4OCVFNCVCOCU4MCVFOCVBMSU4QyVFNCVCOCU4MCVFNCVCOCVBQSVFOCU4QSU4MiVFNyU4MiVCOSVFOSU5MyVCRSVFNiU4RSVBNSVFNSU4RCVCMyVFNSU4RiVBRiVFRiVCQyU4OSVFRiVCQyU5QQp2bGVzcyUzQSUyRiUyRjI0NmFhNzk1LTA2MzctNGY0Yy04ZjY0LTJjOGZiMjRjMWJhZCU0MDEyNy4wLjAuMSUzQTEyMzQlM0ZlbmNyeXB0aW9uJTNEbm9uZSUyNnNlY3VyaXR5JTNEdGxzJTI2c25pJTNEVEcuQ01MaXVzc3NzLmxvc2V5b3VyaXAuY29tJTI2YWxsb3dJbnNlY3VyZSUzRDElMjZ0eXBlJTNEd3MlMjZob3N0JTNEVEcuQ01MaXVzc3NzLmxvc2V5b3VyaXAuY29tJTI2cGF0aCUzRCUyNTJGJTI1M0ZlZCUyNTNEMjU2MCUyM0NGbmF0CnRyb2phbiUzQSUyRiUyRmFhNmRkZDJmLWQxY2YtNGE1Mi1iYTFiLTI2NDBjNDFhNzg1NiU0MDIxOC4xOTAuMjMwLjIwNyUzQTQxMjg4JTNGc2VjdXJpdHklM0R0bHMlMjZzbmklM0RoazEyLmJpbGliaWxpLmNvbSUyNmFsbG93SW5zZWN1cmUlM0QxJTI2dHlwZSUzRHRjcCUyNmhlYWRlclR5cGUlM0Rub25lJTIzSEsKc3MlM0ElMkYlMkZZMmhoWTJoaE1qQXRhV1YwWmkxd2IyeDVNVE13TlRveVJYUlFjVzQyU0ZscVZVNWpTRzlvVEdaVmNFWlJkMjVtYWtORFVUVnRhREZ0U21SRlRVTkNkV04xVjFvNVVERjFaR3RTUzBodVZuaDFielUxYXpGTFdIb3lSbTgyYW5KbmRERTRWelkyYjNCMGVURmxOR0p0TVdwNlprTm1RbUklMjUzRCU0MDg0LjE5LjMxLjYzJTNBNTA4NDElMjNERQoKCiVFOCVBRSVBMiVFOSU5OCU4NSVFOSU5MyVCRSVFNiU4RSVBNSVFNyVBNCVCQSVFNCVCRSU4QiVFRiVCQyU4OCVFNCVCOCU4MCVFOCVBMSU4QyVFNCVCOCU4MCVFNiU5RCVBMSVFOCVBRSVBMiVFOSU5OCU4NSVFOSU5MyVCRSVFNiU4RSVBNSVFNSU4RCVCMyVFNSU4RiVBRiVFRiVCQyU4OSVFRiVCQyU5QQpodHRwcyUzQSUyRiUyRnN1Yi54Zi5mcmVlLmhyJTJGYXV0bw=='))}"
-							id="content">${content}</textarea>
-						<div class="save-container">
-							<button class="save-btn" onclick="saveContent(this)">保存</button>
-							<span class="save-status" id="saveStatus"></span>
-						</div>
-						` : '<p>请绑定 <strong>变量名称</strong> 为 <strong>KV</strong> 的KV命名空间</p>'}
-					</div>
-					<br>
-					################################################################<br>
-					${decodeURIComponent(atob('dGVsZWdyYW0lMjAlRTQlQkElQTQlRTYlQjUlODElRTclQkUlQTQlMjAlRTYlOEElODAlRTYlOUMlQUYlRTUlQTQlQTclRTQlQkQlQUMlN0UlRTUlOUMlQTglRTclQkElQkYlRTUlOEYlOTElRTclODklOEMhJTNDYnIlM0UKJTNDYSUyMGhyZWYlM0QlMjdodHRwcyUzQSUyRiUyRnQubWUlMkZDTUxpdXNzc3MlMjclM0VodHRwcyUzQSUyRiUyRnQubWUlMkZDTUxpdXNzc3MlM0MlMkZhJTNFJTNDYnIlM0UKLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tJTNDYnIlM0UKZ2l0aHViJTIwJUU5JUExJUI5JUU3JTlCJUFFJUU1JTlDJUIwJUU1JTlEJTgwJTIwU3RhciFTdGFyIVN0YXIhISElM0NiciUzRQolM0NhJTIwaHJlZiUzRCUyN2h0dHBzJTNBJTJGJTJGZ2l0aHViLmNvbSUyRmNtbGl1JTJGQ0YtV29ya2Vycy1TVUIlMjclM0VodHRwcyUzQSUyRiUyRmdpdGh1Yi5jb20lMkZjbWxpdSUyRkNGLVdvcmtlcnMtU1VCJTNDJTJGYSUzRSUzQ2JyJTNFCi0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLSUzQ2JyJTNFCiUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMyUyMw=='))}
-					<br><br>UA: <strong>${request.headers.get('User-Agent')}</strong>
-					<script>
-					function copyToClipboard(text, qrcode) {
-						navigator.clipboard.writeText(text).then(() => {
-							alert('已复制到剪贴板');
-						}).catch(err => {
-							console.error('复制失败:', err);
-						});
-						const qrcodeDiv = document.getElementById(qrcode);
-						qrcodeDiv.innerHTML = '';
-						new QRCode(qrcodeDiv, {
-							text: text,
-							width: 220, // 调整宽度
-							height: 220, // 调整高度
-							colorDark: "#000000", // 二维码颜色
-							colorLight: "#ffffff", // 背景颜色
-							correctLevel: QRCode.CorrectLevel.Q, // 设置纠错级别
-							scale: 1 // 调整像素颗粒度
-						});
-					}
-						
-					if (document.querySelector('.editor')) {
-						let timer;
-						const textarea = document.getElementById('content');
-						const originalContent = textarea.value;
-		
-						function goBack() {
-							const currentUrl = window.location.href;
-							const parentUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/'));
-							window.location.href = parentUrl;
-						}
-		
-						function replaceFullwidthColon() {
-							const text = textarea.value;
-							textarea.value = text.replace(/：/g, ':');
-						}
-						
-						function saveContent(button) {
-							try {
-								const updateButtonText = (step) => {
-									button.textContent = \`保存中: \${step}\`;
-								};
-								// 检测是否为iOS设备
-								const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-								
-								// 仅在非iOS设备上执行replaceFullwidthColon
-								if (!isIOS) {
-									replaceFullwidthColon();
-								}
-								updateButtonText('开始保存');
-								button.disabled = true;
+            // 1. Token 校验
+            const expectedToken = env.SUB_TOKEN;
+            if (expectedToken && reqToken !== expectedToken) {
+                return new Response(encodeBase64(createErrorNode('❌ Token 验证失败，请检查链接参数')), { 
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'no-cache' } 
+                });
+            }
 
-								// 获取textarea内容和原始内容
-								const textarea = document.getElementById('content');
-								if (!textarea) {
-									throw new Error('找不到文本编辑区域');
-								}
+            if (!baseLink) return new Response(encodeBase64(createErrorNode('❌ 请在首页输入基础节点链接')), {
+                headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'no-cache' }
+            });
 
-								updateButtonText('获取内容');
-								let newContent;
-								let originalContent;
-								try {
-									newContent = textarea.value || '';
-									originalContent = textarea.defaultValue || '';
-								} catch (e) {
-									console.error('获取内容错误:', e);
-									throw new Error('无法获取编辑内容');
-								}
+            // 2. 缓存读取
+            const cache = caches.default;
+            const cacheKey = new Request(url.toString(), req); 
+            let res = await cache.match(cacheKey);
+            if (res) return res;
 
-								updateButtonText('准备状态更新函数');
-								const updateStatus = (message, isError = false) => {
-									const statusElem = document.getElementById('saveStatus');
-									if (statusElem) {
-										statusElem.textContent = message;
-										statusElem.style.color = isError ? 'red' : '#666';
-									}
-								};
+            let ipRows = [];
 
-								updateButtonText('准备按钮重置函数');
-								const resetButton = () => {
-									button.textContent = '保存';
-									button.disabled = false;
-								};
+            // 3. 获取数据源
+            if (source === 'ext' && extUrl) {
+                try {
+                    // 加上 User-Agent 伪装，防止被部分外部链接的防火墙拦截
+                    const extRes = await fetch(extUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }});
+                    if (!extRes.ok) throw new Error(`HTTP状态码异常: ${extRes.status}`);
+                    
+                    const extText = await extRes.text();
+                    
+                    // 防御检查：如果拉取到的内容是 HTML（比如防CC盾、404网页），直接报错，防止生成无效节点
+                    if (extText.trim().startsWith('<')) {
+                        throw new Error('获取到的是网页而非纯文本列表，可能是链接失效或触发了防CC拦截');
+                    }
 
-								if (newContent !== originalContent) {
-									updateButtonText('发送保存请求');
-									fetch(window.location.href, {
-										method: 'POST',
-										body: newContent,
-										headers: {
-											'Content-Type': 'text/plain;charset=UTF-8'
-										},
-										cache: 'no-cache'
-									})
-									.then(response => {
-										updateButtonText('检查响应状态');
-										if (!response.ok) {
-											throw new Error(\`HTTP error! status: \${response.status}\`);
-										}
-										updateButtonText('更新保存状态');
-										const now = new Date().toLocaleString();
-										document.title = \`编辑已保存 \${now}\`;
-										updateStatus(\`已保存 \${now}\`);
-									})
-									.catch(error => {
-										updateButtonText('处理错误');
-										console.error('Save error:', error);
-										updateStatus(\`保存失败: \${error.message}\`, true);
-									})
-									.finally(() => {
-										resetButton();
-									});
-								} else {
-									updateButtonText('检查内容变化');
-									updateStatus('内容未变化');
-									resetButton();
-								}
-							} catch (error) {
-								console.error('保存过程出错:', error);
-								button.textContent = '保存';
-								button.disabled = false;
-								const statusElem = document.getElementById('saveStatus');
-								if (statusElem) {
-									statusElem.textContent = \`错误: \${error.message}\`;
-									statusElem.style.color = 'red';
-								}
-							}
-						}
-		
-						textarea.addEventListener('blur', saveContent);
-						textarea.addEventListener('input', () => {
-							clearTimeout(timer);
-							timer = setTimeout(saveContent, 5000);
-						});
-					}
+                    const lines = extText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+                    ipRows = lines.map(line => {
+                        const { displayIp, port, name } = parseIP(line);
+                        return { 
+                            ip: port === 'N/A' ? displayIp : `${displayIp}:${port}`, 
+                            name: name || '外网优选节点' 
+                        };
+                    }).filter(r => r.ip);
+                } catch (e) {
+                    // 核心修复：如果是外部拉取报错，返回一个伪装的 VLESS 节点，将错误原因直接显示在客户端列表里！
+                    return new Response(encodeBase64(createErrorNode(`❌ 外部优选库拉取失败: ${e.message}`)), {
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8', 'Cache-Control': 'no-cache' }
+                    });
+                }
+            } else {
+                const { results } = await env.DB.prepare(
+                    'SELECT ip, name FROM ips WHERE active=1 ORDER BY priority, id LIMIT ?'
+                ).bind(MAX_IPS).all();
+                ipRows = results;
+            }
 
-					function toggleNotice() {
-						const noticeContent = document.getElementById('noticeContent');
-						const noticeToggle = document.getElementById('noticeToggle');
-						if (noticeContent.style.display === 'none' || noticeContent.style.display === '') {
-							noticeContent.style.display = 'block';
-							noticeToggle.textContent = '隐藏访客订阅∧';
-						} else {
-							noticeContent.style.display = 'none';
-							noticeToggle.textContent = '查看访客订阅∨';
-						}
-					}
-			
-					// 初始化 noticeContent 的 display 属性
-					document.addEventListener('DOMContentLoaded', () => {
-						document.getElementById('noticeContent').style.display = 'none';
-					});
-					</script>
-				</body>
-			</html>
-		`;
+            // 4. 合并裂变
+            const generatedLinks = ipRows
+                .map(row => multiplexLink(baseLink, row))
+                .filter(Boolean)
+                .join('\n');
 
-		return new Response(html, {
-			headers: { "Content-Type": "text/html;charset=utf-8" }
-		});
-	} catch (error) {
-		console.error('处理请求时发生错误:', error);
-		return new Response("服务器错误: " + error.message, {
-			status: 500,
-			headers: { "Content-Type": "text/plain;charset=utf-8" }
-		});
-	}
-}
+            // 5. 兜底检查
+            const finalOutput = generatedLinks || createErrorNode('❌ 没有生成任何可用节点(可能是基础节点格式不兼容或无优选IP)');
+
+            res = new Response(encodeBase64(finalOutput), {
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8',
+                    'Cache-Control': `public, max-age=${CACHE_TTL}`
+                }
+            });
+
+            ctx.waitUntil(cache.put(cacheKey, res.clone()));
+            return res;
+        }
+
+        if (path.startsWith('/api/')) {
+            return handleApiRoute(req, env.DB, ctx, env.TASK_KV);
+        }
+
+        return new Response('Not Found', { status: 404 });
+    },
+};
