@@ -4,7 +4,7 @@
 
 自带可视化的优选 IP 管理后台与自定义短链系统，完美解决订阅链接过长、节点信息暴露等痛点。
 
-([https://github.com/DesireOr2/Desire-Sub-Worker](https://github.com/xiagefei/GeFei-Sub-Worker-/blob/main/sub.png?raw=true))
+(https://github.com/xiagefei/GeFei-Sub-Worker-/blob/main/sub.png?raw=true)
 
 ✨ 核心特性
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
