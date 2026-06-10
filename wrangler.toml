@@ -1,8 +1,19 @@
-name = "sub-worker"
-main = "_worker.js"
-compatibility_date = "2025-07-23"
-keep_vars = true
+name = "GeFei-sub-worker"
+main = "worker.js"
+compatibility_date = "2026-06-10"
 
-#[[kv_namespaces]]
-#binding = "KV"			#KV绑定名默认不可修改
-#id = "7dbef248fcc547d39689967f91f5f46f"					#KV据库id
+# 绑定 KV 命名空间 (用于缓存和任务状态)
+[[kv_namespaces]]
+binding = "TASK_KV"
+id = "请替换为你的_KV_ID"
+
+# 绑定 D1 数据库 (用于存储优选 IP)
+[[d1_databases]]
+binding = "DB"
+database_name = "sub-db"
+database_id = "请替换为你的_D1_数据库_ID"
+
+# --- 环境变量建议在 Cloudflare 后台面板设置以保证安全 ---
+# [vars]
+# ADMIN_PASSWORD = "your_admin_password" 
+# SUB_TOKEN = "your_sub_token"
