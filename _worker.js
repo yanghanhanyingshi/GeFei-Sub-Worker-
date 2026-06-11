@@ -278,7 +278,7 @@ const api = {
             } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
         })());
         return json({ success: true, async: true, taskId });
-    }，
+    },
     async updateIp(db, id, body, kv) {
         const { active, ip, priority } = body;
         const updates = [];
@@ -426,7 +426,7 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
             <option value="https://raw.githubusercontent.com/svip-s/cloudflare_ip/refs/heads/main/best_ips.txt">📶 动态测速 API - 移动优先</option>
             <option value="https://bestcf.pages.dev/luoli/all.txt">🌐 动态测速 API - 通用官方</option>
             <option value="https://raw.githubusercontent.com/cmliu/WorkerVless2sub/main/addressesapi.txt">📦 静态 TXT 库 - cmliu (备用)</option>
-            <option value="自行修改成自己的地址">📦 红星优选库 (主力)</option>
+            <option value="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/addressesapi.txt">📦 红星优选库 (主力)</option>
             <option value="">✍️ 自定义：清空并手动输入链接...</option>
         </select>
         <input type="text" id="extUrl" placeholder="请选择上方接口或粘贴你的链接..." value="https://api.example.com/ct?ips=6" autocomplete="off">
