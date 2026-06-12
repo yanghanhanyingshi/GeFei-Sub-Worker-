@@ -220,7 +220,7 @@ const api = {
             } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
         })());
         return json({ success: true, async: true, taskId, count: ips.length });
-    },
+    }，
     async batchDelete(db, { ips }, ctx, kv) {
         if (!Array.isArray(ips) || !ips.length) return err('列表为空');
         const taskId = crypto.randomUUID();
@@ -295,7 +295,7 @@ const api = {
         await db.prepare('DELETE FROM ips WHERE id=?').bind(id).run();
         await invalidateCache(kv);
         return json({ success: true });
-    },
+    }，
     async sortIps(db, ctx, kv) {
         const taskId = crypto.randomUUID();
         ctx.waitUntil((async () => {
@@ -403,7 +403,7 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
 <body>
 <div class="card">
     <div class="avatar"><img src="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/tux.png" alt="Logo"></div>
-    <h1>红星闪闪❤️❤️❤️优选订阅</h1>
+    <h1>红星闪闪❤️の优选订阅</h1>
     
     <div class="form-group">
         <label>基础节点链接</label>
@@ -437,7 +437,7 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
             安全 Token (必填!)
             <a href="https://t.me/xiagefei" target="_blank" style="font-size: 12px; color: #58a6ff; font-weight: normal; margin-left: 8px; text-decoration: none;">(前往获取)</a>
         </label>
-        <input type="password" id="subToken" placeholder="防止接口被他人滥用生成订阅, 请输入" autocomplete="off">
+        <input type="password" id="subToken" placeholder="请输入变量设置的sub-token" autocomplete="off">
     </div>
 
     <button onclick="generateSub()" id="genBtn" style="margin-top:10px;">生成优选短链</button>
