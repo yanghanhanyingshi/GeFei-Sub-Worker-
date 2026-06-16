@@ -224,7 +224,7 @@ const api = {
     async batchDelete(db, { ips }, ctx, kv) {
         if (!Array.isArray(ips) || !ips.length) return err('列表为空');
         const taskId = crypto.randomUUID();
-        ctx.waitUntil((async () => {
+        ctx。waitUntil((async () => {
             try {
                 const deleteIps = ips.map(line => {
                     let targetIp = line.trim();
@@ -435,7 +435,7 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
     <div class="form-group">
         <label>
             安全 Token (必填!)
-            <a href="https://t.me/xiagefei" target="_blank" style="font-size: 12px; color: #58a6ff; font-weight: normal; margin-left: 8px; text-decoration: none;">(前往获取)</a>
+            <a href="https://t.me/xiagefei" target="_blank" style="font-size: 12px; color: #58a6ff; font-weight: normal; margin-left: 8px; text-decoration: none;">(sub-token)</a>
         </label>
         <input type="password" id="subToken" placeholder="请输入变量设置的sub-token" autocomplete="off">
     </div>
