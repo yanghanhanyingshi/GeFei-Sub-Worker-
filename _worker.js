@@ -220,11 +220,11 @@ const api = {
             } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
         })());
         return json({ success: true, async: true, taskId, count: ips.length });
-    }，
+    },
     async batchDelete(db, { ips }, ctx, kv) {
         if (!Array.isArray(ips) || !ips.length) return err('列表为空');
         const taskId = crypto.randomUUID();
-        ctx。waitUntil((async () => {
+        ctx.waitUntil((async () => {
             try {
                 const deleteIps = ips.map(line => {
                     let targetIp = line.trim();
@@ -295,7 +295,7 @@ const api = {
         await db.prepare('DELETE FROM ips WHERE id=?').bind(id).run();
         await invalidateCache(kv);
         return json({ success: true });
-    }，
+    },
     async sortIps(db, ctx, kv) {
         const taskId = crypto.randomUUID();
         ctx.waitUntil((async () => {
@@ -367,43 +367,164 @@ const handleApiRoute = async (req, db, ctx, kv) => {
 };
 
 // ==========================================
-// 前端 HTML: 公开生成页面 (已脱敏 + 支持短链)
+// 前端 HTML: 公开生成页面 (手机端适配版)
 // ==========================================
 const getPublicHTML = () => `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>❤️❤️❤️红星优选</title>
-<link rel="icon" sizes="56x56" href="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/tux.png">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>灵鹿优选</title>
+<link rel="icon" sizes="56x56" href="https://pan.ling-lu-02.ccwu.cc/raw/------/2.jpg">
 <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
-body { background-color: #1a1a2e; background-image: url('https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/bioluminescence-3840x2160-15292.jpg'); background-size: cover; background-position: center; background-attachment: fixed; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; justify-content: flex-start; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
-.card { background: rgba(44, 44, 44, 0.1); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); padding: 40px; border-radius: 20px; width: 100%; max-width: 500px; box-shadow: 0 10px 40px rgba(0,0,0,0.6); text-align: center; border: 1px solid rgba(255, 255, 255, 0.1);margin-left: 240px; }
-.avatar { width: 80px; height: 80px; border-radius: 50%; background: #fff; margin: 0 auto 20px; display: flex; align-items: center; justify-content: center; font-size: 40px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+    background: #0a0a1a; 
+    min-height: 100vh; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+    padding: 16px; 
+}
+body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(ellipse at 50% 0%, #1a1a3e 0%, #0a0a1a 70%);
+    z-index: -1;
+}
+.card { 
+    background: rgba(255,255,255,0.05); 
+    backdrop-filter: blur(20px); 
+    -webkit-backdrop-filter: blur(20px); 
+    padding: 24px 20px; 
+    border-radius: 24px; 
+    width: 100%; 
+    max-width: 440px; 
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6); 
+    border: 1px solid rgba(255,255,255,0.08); 
+}
+.avatar { 
+    width: 64px; 
+    height: 64px; 
+    border-radius: 50%; 
+    margin: 0 auto 16px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    overflow: hidden; 
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+}
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
-h1 { font-size: 24px; margin-bottom: 40px; font-weight: 600; letter-spacing: 0.5px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); font-style: italic; }
-.form-group { text-align: left; margin-bottom: 20px; }
-label { display: block; font-size: 14px; margin-bottom: 8px; color: #eaeaea; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-input, select { width: 100%; padding: 16px; background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; color: #fff; font-size: 14px; box-sizing: border-box; transition: all 0.3s ease; }
-input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3); background: rgba(0, 0, 0, 0.6); }
-input::placeholder { color: #aaa; }
-select option { color: #000; background: #fff; }
-button { width: 100%; padding: 16px; background: rgba(30, 58, 138, 0.85); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; transition: all 0.3s; margin-bottom: 15px; backdrop-filter: blur(5px); }
-button:hover { background: rgba(29, 78, 216, 0.95); transform: translateY(-1px); }
-button:disabled { opacity: 0.7; cursor: not-allowed; }
-.footer { margin-top: 30px; font-size: 12px; color: #bbb; line-height: 1.6; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-.tg-link { color: #58a6ff; text-decoration: none; font-weight: bold; transition: color 0.2s; }
-.tg-link:hover { color: #79c0ff; text-decoration: underline; }
-#qrWrap { display: none; justify-content: center; margin-top: 25px; animation: fadeIn 0.5s ease; }
-#qrCodeBox { background: #fff; padding: 15px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+h1 { 
+    font-size: 22px; 
+    text-align: center; 
+    margin-bottom: 28px; 
+    font-weight: 600; 
+    letter-spacing: 0.5px; 
+    background: linear-gradient(135deg, #60a5fa, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.form-group { margin-bottom: 16px; }
+label { 
+    display: block; 
+    font-size: 13px; 
+    margin-bottom: 6px; 
+    color: #94a3b8; 
+    font-weight: 500; 
+}
+input, select { 
+    width: 100%; 
+    padding: 14px 16px; 
+    background: rgba(0,0,0,0.4); 
+    border: 1px solid rgba(255,255,255,0.08); 
+    border-radius: 12px; 
+    color: #f1f5f9; 
+    font-size: 15px; 
+    transition: all 0.3s ease; 
+    -webkit-appearance: none;
+    appearance: none;
+}
+input:focus, select:focus { 
+    outline: none; 
+    border-color: #3b82f6; 
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); 
+    background: rgba(0,0,0,0.6); 
+}
+input::placeholder { color: #64748b; }
+select { 
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+}
+select option { color: #000; background: #1e293b; }
+button { 
+    width: 100%; 
+    padding: 14px; 
+    background: linear-gradient(135deg, #3b82f6, #6366f1); 
+    color: #fff; 
+    border: none; 
+    border-radius: 12px; 
+    font-size: 16px; 
+    font-weight: 600; 
+    cursor: pointer; 
+    transition: all 0.3s; 
+    margin-top: 4px;
+}
+button:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(59, 130, 246, 0.3); }
+button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+#subResult { 
+    background: rgba(0,0,0,0.5); 
+    color: #60a5fa; 
+    font-size: 14px; 
+    cursor: pointer; 
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(96, 165, 250, 0.2);
+    word-break: break-all;
+}
+.footer { 
+    margin-top: 24px; 
+    text-align: center; 
+    font-size: 12px; 
+    color: #64748b; 
+    line-height: 1.8; 
+}
+.tg-link { color: #60a5fa; text-decoration: none; font-weight: 500; }
+.tg-link:hover { text-decoration: underline; }
+#qrWrap { display: none; justify-content: center; margin-top: 20px; }
+#qrCodeBox { background: #fff; padding: 12px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+#qrCodeBox img { display: block; }
+
+/* 手机端特殊优化 */
+@media (max-width: 480px) {
+    body { padding: 12px; }
+    .card { padding: 20px 16px; border-radius: 20px; }
+    h1 { font-size: 20px; margin-bottom: 24px; }
+    input, select { padding: 12px 14px; font-size: 16px; } /* 防止 iOS 自动缩放 */
+    button { padding: 14px; font-size: 15px; }
+    .avatar { width: 56px; height: 56px; }
+}
+
+/* 针对 iOS 安全区域 */
+@supports (padding: max(0px)) {
+    body { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+}
 </style>
 </head>
 <body>
 <div class="card">
-    <div class="avatar"><img src="https://raw.githubusercontent.com/xiagefei/CFBestIP/refs/heads/main/tux.png" alt="Logo"></div>
-    <h1>红星闪闪❤️の优选订阅</h1>
+    <div class="avatar"><img src="https://pan.ling-lu-02.ccwu.cc/raw/------/2.jpg" alt="Logo"></div>
+    <h1>灵鹿の优选订阅</h1>
     
     <div class="form-group">
         <label>基础节点链接</label>
@@ -435,12 +556,12 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
     <div class="form-group">
         <label>
             安全 Token (必填!)
-            <a href="https://t.me/xiagefei" target="_blank" style="font-size: 12px; color: #58a6ff; font-weight: normal; margin-left: 8px; text-decoration: none;">(sub-token)</a>
+            <a href="https://t.me/lingluai" target="_blank" style="font-size: 12px; color: #60a5fa; font-weight: 400; margin-left: 6px; text-decoration: none;">(sub-token:9527)</a>
         </label>
         <input type="password" id="subToken" placeholder="请输入变量设置的sub-token" autocomplete="off">
     </div>
 
-    <button onclick="generateSub()" id="genBtn" style="margin-top:10px;">生成优选短链</button>
+    <button onclick="generateSub()" id="genBtn">生成优选短链</button>
     
     <div class="form-group" style="margin-top: 20px;">
         <label>您的专属订阅 ❗</label>
@@ -452,7 +573,7 @@ button:disabled { opacity: 0.7; cursor: not-allowed; }
     </div>
 
     <div class="footer">
-        支持: <a href="https://t.me/xiagefei" target="_blank" class="tg-link">加入tg群组获取最新动态</a> - 由 XiaGeFei 提供维护 &copy; 2026
+        支持: <a href="https://t.me/lingluai" target="_blank" class="tg-link">加入TG群组</a> - 由 灵鹿优选 维护 &copy; 2026
     </div>
 </div>
 <script>
@@ -471,16 +592,13 @@ async function generateSub() {
     if (source === 'ext' && !extUrl) { alert('请填写外部优选链接！'); return; }
 
     const btn = document.getElementById('genBtn');
-    btn.innerText = "生成中..."; btn.style.opacity = "0.7";
-    btn.disabled = true;
+    btn.innerText = "生成中..."; btn.disabled = true;
     
-    // 1. 拼接原有的参数
     let subParams = '/sub?base=' + encodeURIComponent(link);
     if(token) subParams += '&token=' + encodeURIComponent(token);
     if(source === 'ext') subParams += '&source=ext&ext_url=' + encodeURIComponent(extUrl);
     
     try {
-        // 2. 调用 API 生成短链
         const res = await fetch('/api/shorten', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -489,95 +607,116 @@ async function generateSub() {
         const data = await res.json();
 
         if (data.success) {
-            // 3. 组装最终的短链显示给用户
             const shortUrl = window.location.origin + '/s/' + data.shortId;
             document.getElementById('subResult').value = shortUrl;
             
-            // 生成二维码
             const qrWrap = document.getElementById('qrWrap');
             const qrCodeBox = document.getElementById('qrCodeBox');
             qrCodeBox.innerHTML = ''; 
             qrWrap.style.display = 'flex'; 
             
             new QRCode(qrCodeBox, {
-                text: shortUrl, width: 180, height: 180,
+                text: shortUrl, width: 160, height: 160,
                 colorDark : "#000000", colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.M
             });
         } else {
             alert('生成短链失败: ' + (data.error || '未知错误'));
-            document.getElementById('subResult').value = window.location.origin + subParams; // 降级显示长链
+            document.getElementById('subResult').value = window.location.origin + subParams;
         }
     } catch (e) {
         alert('网络请求失败，请检查控制台。');
-        document.getElementById('subResult').value = window.location.origin + subParams; // 降级显示长链
+        document.getElementById('subResult').value = window.location.origin + subParams;
     } finally {
         btn.innerText = "生成优选短链"; 
-        btn.style.opacity = "1";
         btn.disabled = false;
     }
 }
 
 function copyLink() {
     const res = document.getElementById('subResult');
-    if(res.value) { res.select(); document.execCommand('copy'); alert('✅ 订阅链接已复制！快去客户端添加吧。'); }
+    if(res.value) { 
+        res.select(); 
+        document.execCommand('copy'); 
+        alert('✅ 订阅链接已复制！');
+    }
 }
 </script>
 </body>
 </html>`;
 
 // ==========================================
-// 前端 HTML: 后台优选 IP 管理面板
+// 前端 HTML: 后台优选 IP 管理面板 (手机端适配版)
 // ==========================================
 const getAdminHTML = () => `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>优选 IP 管理后台</title>
 <style>
-:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--fg:#e6edf3;--fg2:#b3bac4;--fg3:#8b949e;--border:#30363d;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--purple:#a371f7;--orange:#db6d28;--radius:12px;}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#1c2333;--fg:#e6edf3;--fg2:#8b949e;--border:#30363d;--blue:#58a6ff;--green:#3fb950;--red:#f85149;--purple:#a371f7;--radius:12px;}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font:15px/1.6 sans-serif;background:var(--bg);color:var(--fg);min-height:100vh}
-.container{max-width:1200px;margin:0 auto;padding:30px 24px}
-.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:40px}
-h1{font-size:32px;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;color:transparent; margin:0;}
-.back-btn { color: var(--blue); text-decoration: none; font-weight: bold; }
-.section{background:var(--bg2);border-radius:var(--radius);padding:24px;margin-bottom:24px;border:1px solid var(--border)}
-h2{font-size:18px;margin-bottom:20px;display:flex;align-items:center;gap:10px}
-h2::before{content:'';width:4px;height:16px;background:var(--blue);border-radius:2px}
-.stats{display:flex;gap:16px;margin-bottom:24px}
-.stat{flex:1;background:var(--bg3);padding:20px;border-radius:var(--radius);text-align:center;border:1px solid var(--border)}
-.stat-num{font-size:28px;font-weight:bold;color:var(--blue)}
-input,textarea{width:100%;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);margin-bottom:16px}
-input:focus,textarea:focus{outline:none;border-color:var(--blue);}
-button{background:var(--blue);color:#fff;border:none;padding:10px 20px;border-radius:8px;cursor:pointer;font-weight:bold;margin-right:8px;margin-bottom:8px;transition: opacity 0.2s;}
-button:hover{opacity: 0.8;}
-button:disabled{opacity: 0.5; cursor: not-allowed;}
+body{font:15px/1.6 -apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:12px}
+.container{max-width:1200px;margin:0 auto;padding:12px 8px}
+.header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+h1{font-size:24px;background:linear-gradient(135deg,var(--blue),var(--purple));-webkit-background-clip:text;color:transparent;margin:0}
+.back-btn{color:var(--blue);text-decoration:none;font-weight:bold;font-size:14px}
+.section{background:var(--bg2);border-radius:var(--radius);padding:16px;margin-bottom:16px;border:1px solid var(--border)}
+h2{font-size:16px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+h2::before{content:'';width:3px;height:14px;background:var(--blue);border-radius:2px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.stat{background:var(--bg3);padding:16px;border-radius:var(--radius);text-align:center;border:1px solid var(--border)}
+.stat-num{font-size:24px;font-weight:bold;color:var(--blue)}
+.stat-label{font-size:13px;color:var(--fg2);margin-top:4px}
+input,textarea{width:100%;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--fg);font-size:15px;margin-bottom:12px;font-family:inherit}
+input:focus,textarea:focus{outline:none;border-color:var(--blue)}
+textarea{min-height:80px;resize:vertical}
+button{background:var(--blue);color:#fff;border:none;padding:10px 18px;border-radius:8px;cursor:pointer;font-weight:600;font-size:14px;transition:opacity 0.2s;min-height:44px}
+button:hover{opacity:0.85}
+button:disabled{opacity:0.5;cursor:not-allowed}
 button.danger{background:var(--red)}
-button.sec{background:var(--bg3);color:var(--fg)}
-button.page-btn{padding:8px 14px; margin:0;}
-button.page-btn.active{background:var(--blue); color:#fff; cursor:default; opacity:1;}
-.ip-list{list-style:none;}
-.ip-item{display:flex;justify-content:space-between;align-items:center;padding:16px;background:var(--bg3);border:1px solid var(--border);margin-bottom:8px;border-radius:8px; flex-wrap: wrap; gap: 10px;}
-.ip-address { font-family:monospace; font-size:16px; color:var(--fg); word-break: break-all; } 
-.ip-meta{font-size:13px;color:var(--fg2);margin-top:4px}
-.tag{background:rgba(88,166,255,0.1);color:var(--blue);padding:2px 8px;border-radius:4px;font-size:12px;margin-right:6px}
-.action-buttons{display: flex; gap: 8px; flex-wrap: wrap; align-items: center;}
-.status-text.active { color: var(--green); }
-.status-text.inactive { color: var(--red); }
-.search-box { display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; }
-.search-box input { margin-bottom:0; flex:1; min-width:200px; }
-.page-badge { color:var(--fg2); font-size:14px; background:var(--bg3); padding:6px 14px; border-radius:20px; border:1px solid var(--border); }
+button.sec{background:var(--bg3);color:var(--fg);border:1px solid var(--border)}
+button.page-btn{padding:8px 14px;margin:0;min-height:36px;font-size:13px}
+button.page-btn.active{background:var(--blue);color:#fff;border-color:var(--blue);cursor:default}
+.ip-list{list-style:none}
+.ip-item{display:flex;flex-direction:column;padding:14px 16px;background:var(--bg3);border:1px solid var(--border);margin-bottom:8px;border-radius:8px;gap:10px}
+.ip-address{font-family:monospace;font-size:15px;color:var(--fg);word-break:break-all}
+.ip-meta{font-size:13px;color:var(--fg2);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{background:rgba(88,166,255,0.12);color:var(--blue);padding:2px 10px;border-radius:12px;font-size:12px}
+.action-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.action-buttons button{flex:1;min-width:80px;text-align:center}
+.status-text.active{color:var(--green)}
+.status-text.inactive{color:var(--red)}
+.search-box{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.search-box input{flex:1;min-width:120px;margin-bottom:0}
+.page-badge{color:var(--fg2);font-size:13px;background:var(--bg3);padding:4px 14px;border-radius:16px;border:1px solid var(--border)}
+#pagination{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-top:20px;align-items:center}
+#msg{color:var(--green);margin-top:10px;font-weight:bold;font-size:14px;min-height:24px}
+#editModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;z-index:1000;padding:16px;backdrop-filter:blur(4px)}
+#editModal>div{background:var(--bg2);border-radius:var(--radius);padding:20px;width:100%;max-width:380px;border:1px solid var(--border)}
+#editModal h2{font-size:18px;margin-top:0}
 
-@media (max-width: 768px) {
-    .container { padding: 15px 12px; }
-    .header { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
-    .ip-item { flex-direction: column; align-items: flex-start; }
-    .action-buttons button, .search-box button { width: 100%; margin-right: 0; }
-    .action-buttons { flex-direction: column; width: 100%; }
-    #pagination { gap: 4px; }
-    .page-btn { padding: 6px 10px; }
+/* 手机端优化 */
+@media (max-width: 480px) {
+    body{padding:8px}
+    .container{padding:8px 4px}
+    .header h1{font-size:20px}
+    .stats{grid-template-columns:1fr 1fr;gap:8px}
+    .stat{padding:12px}
+    .stat-num{font-size:20px}
+    .section{padding:12px}
+    .action-buttons button{flex:1;min-width:60px;font-size:13px;padding:8px 12px}
+    .ip-item{padding:12px 14px}
+    .ip-address{font-size:14px}
+    button.page-btn{padding:6px 10px;font-size:12px;min-height:32px}
+    #pagination{gap:4px}
+    input,textarea{font-size:16px;padding:10px 12px} /* 防止 iOS 缩放 */
+}
+@media (max-width: 360px) {
+    .stats{grid-template-columns:1fr 1fr}
+    .header{flex-direction:column;align-items:flex-start}
+    .action-buttons button{font-size:12px;padding:6px 10px;min-width:50px}
 }
 </style>
 </head>
@@ -589,61 +728,57 @@ button.page-btn.active{background:var(--blue); color:#fff; cursor:default; opaci
     </div>
 
     <div class="stats">
-        <div class="stat"><div class="stat-num" id="total">-</div><div>总优选IP</div></div>
-        <div class="stat"><div class="stat-num" id="active">-</div><div>活跃中</div></div>
+        <div class="stat"><div class="stat-num" id="total">-</div><div class="stat-label">总优选IP</div></div>
+        <div class="stat"><div class="stat-num" id="active">-</div><div class="stat-label">活跃中</div></div>
     </div>
 
     <div class="section">
-        <h2>批量添加 / 删除指定 IP</h2>
-        <textarea id="batchIps" rows="5" placeholder="格式: IP:端口#国家 (例如 104.16.2.3:443#美国)&#10;每行一个。删除指定IP时只需粘贴要删的IP或完整节点链接即可。"></textarea>
+        <h2>批量操作</h2>
+        <textarea id="batchIps" rows="4" placeholder="格式: IP:端口#国家 (例如 104.16.2.3:443#美国)&#10;每行一个。删除时粘贴IP或节点链接即可。"></textarea>
         <div class="action-buttons">
             <button onclick="batchImport()">批量导入</button>
-            <button class="danger" onclick="batchDelete()">删除指定IP</button>
-            <button class="danger" style="background:#8b0000;" onclick="clearAll()">清空全部数据</button>
+            <button class="danger" onclick="batchDelete()">删除指定</button>
+            <button class="danger" style="background:#8b0000;" onclick="clearAll()">清空全部</button>
         </div>
     </div>
 
     <div class="section">
-        <h2>操作面板与搜索</h2>
+        <h2>操作面板</h2>
         <div class="search-box">
-            <input id="searchInput" placeholder="无需回车，输入内容自动搜索...">
-            <button class="sec" style="margin-bottom:0;" onclick="clearSearch()">显示全部</button>
+            <input id="searchInput" placeholder="搜索IP或名称...">
+            <button class="sec" style="flex:0 0 auto;" onclick="clearSearch()">显示全部</button>
         </div>
-        <div class="action-buttons" style="flex-direction:row;">
+        <div class="action-buttons">
             <button class="sec" onclick="sortIps()">按地区排序</button>
-            <button class="sec" onclick="removeDuplicates()">清理重复IP</button>
+            <button class="sec" onclick="removeDuplicates()">去重</button>
             <button class="sec" style="color:var(--green)" onclick="toggleAll(1)">全部启用</button>
             <button class="sec" style="color:var(--red)" onclick="toggleAll(0)">全部禁用</button>
         </div>
-        <div id="msg" style="color:var(--green);margin-top:10px;font-weight:bold"></div>
+        <div id="msg"></div>
     </div>
 
     <div class="section">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
             <h2 style="margin:0;">IP 列表</h2>
-            <div class="page-badge">第 <strong id="page" style="color:var(--blue)">1</strong> 页 / 共 <strong id="totalPages" style="color:var(--blue)">1</strong> 页</div>
+            <div class="page-badge">第 <strong id="page" style="color:var(--blue)">1</strong> / <strong id="totalPages" style="color:var(--blue)">1</strong> 页</div>
         </div>
         <div class="ip-list" id="list">加载中...</div>
-        <div id="pagination" style="margin-top:24px; display:flex; justify-content:center; gap:8px; flex-wrap:wrap; align-items:center;"></div>
+        <div id="pagination"></div>
     </div>
 </div>
 
-<div id="editModal" style="display:none; position:fixed; inset:0; background:rgba(13,17,23,0.8); align-items:center; justify-content:center; z-index:1000; padding:20px; backdrop-filter:blur(4px);">
-    <div style="background:var(--bg2); border-radius:var(--radius); padding:24px; width:100%; max-width:400px; border:1px solid var(--border); box-shadow: 0 4px 24px rgba(0,0,0,0.5);">
-        <h2 style="margin-top:0; color:var(--fg); font-size:20px;">编辑节点信息</h2>
+<div id="editModal" onclick="if(event.target===this)closeEdit()">
+    <div>
+        <h2>编辑节点</h2>
         <input id="editId" type="hidden">
-        
-        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">IP 和 端口</label>
-        <input id="editIp" placeholder="例如 104.16.2.3:443" style="margin-bottom:16px;">
-        
-        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">备注名称</label>
-        <input id="editName" placeholder="例如 香港优选 (选填)" style="margin-bottom:16px;">
-        
-        <label style="display:block; font-size:13px; color:var(--fg2); margin-bottom:6px;">排序权重 (越小越靠前，置顶可填 0 或 -1)</label>
-        <input id="editPriority" type="number" placeholder="数字越小越靠前" style="margin-bottom:8px;">
-
-        <div style="display:flex; gap:10px; margin-top:20px;">
-            <button style="flex:1;" onclick="saveEdit()">保存修改</button>
+        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:4px;">IP 和 端口</label>
+        <input id="editIp" placeholder="例如 104.16.2.3:443">
+        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:4px;">备注名称</label>
+        <input id="editName" placeholder="例如 香港优选 (选填)">
+        <label style="display:block;font-size:13px;color:var(--fg2);margin-bottom:4px;">排序权重</label>
+        <input id="editPriority" type="number" placeholder="数字越小越靠前">
+        <div style="display:flex;gap:10px;margin-top:16px">
+            <button style="flex:1;" onclick="saveEdit()">保存</button>
             <button style="flex:1;" class="sec" onclick="closeEdit()">取消</button>
         </div>
     </div>
@@ -670,30 +805,39 @@ const load = async () => {
     const query = new URLSearchParams({ page, needTotal: 'true' });
     if (currentKeyword) query.append('keyword', currentKeyword);
 
-    const [stats, res] = await Promise.all([api('/ips/stats'), api('/ips?' + query.toString())]);
-    
-    $('total').innerText = stats.total; $('active').innerText = stats.active;
-    totalPages = res.pagination.pages || 1;
-    $('page').innerText = page; $('totalPages').innerText = totalPages;
+    try {
+        const [stats, res] = await Promise.all([api('/ips/stats'), api('/ips?' + query.toString())]);
+        
+        $('total').innerText = stats.total || 0; 
+        $('active').innerText = stats.active || 0;
+        totalPages = res.pagination?.pages || 1;
+        $('page').innerText = page; 
+        $('totalPages').innerText = totalPages;
 
-    $('list').innerHTML = res.ips.map(ip => \`
-        <li class="ip-item">
-            <div>
-                <div class="ip-address">\${ip.displayIp}:\${ip.port}</div>
-                <div class="ip-meta">
-                    \${ip.name ? '<span class="tag">'+ip.name+'</span>' : ''}
-                    状态: <span class="status-text \${ip.active ? 'active' : 'inactive'}">\${ip.active?'启用中':'已禁用'}</span>
-                </div>
-            </div>
-            <div style="display:flex; gap:6px; flex-wrap:wrap; width:100%; justify-content: flex-end;">
-                <button class="sec" onclick="openEdit(\${ip.id}, '\${ip.displayIp}', '\${ip.port}', '\${ip.name || ''}', \${ip.priority || 0})">编辑</button>
-                <button class="sec" onclick="toggleIp(\${ip.id}, \${ip.active})">\${ip.active?'禁用':'启用'}</button>
-                <button class="danger" onclick="del(\${ip.id})">删除</button>
-            </div>
-        </li>
-    \`).join('') || '<div style="text-align:center; color:var(--fg2); padding:30px;">'+(currentKeyword?'没有搜索到匹配的节点':'暂无数据')+'</div>';
-    
-    renderPagination();
+        if (res.ips && res.ips.length > 0) {
+            $('list').innerHTML = res.ips.map(ip => \`
+                <li class="ip-item">
+                    <div>
+                        <div class="ip-address">\${ip.displayIp}:\${ip.port}</div>
+                        <div class="ip-meta">
+                            \${ip.name ? '<span class="tag">'+ip.name+'</span>' : ''}
+                            <span class="status-text \${ip.active ? 'active' : 'inactive'}">\${ip.active?'启用中':'已禁用'}</span>
+                        </div>
+                    </div>
+                    <div class="action-buttons" style="width:100%;">
+                        <button class="sec" onclick="openEdit(\${ip.id}, '\${ip.displayIp}', '\${ip.port}', '\${ip.name || ''}', \${ip.priority || 0})">编辑</button>
+                        <button class="sec" onclick="toggleIp(\${ip.id}, \${ip.active})">\${ip.active?'禁用':'启用'}</button>
+                        <button class="danger" onclick="del(\${ip.id})">删除</button>
+                    </div>
+                </li>
+            \`).join('');
+        } else {
+            $('list').innerHTML = '<div style="text-align:center;color:var(--fg2);padding:30px;">'+(currentKeyword?'没有搜索到匹配的节点':'暂无数据')+'</div>';
+        }
+        renderPagination();
+    } catch (e) {
+        $('list').innerHTML = '<div style="text-align:center;color:var(--red);padding:20px;">加载失败，请刷新重试</div>';
+    }
 };
 
 const renderPagination = () => {
@@ -702,14 +846,14 @@ const renderPagination = () => {
     let end = Math.min(totalPages, page + 2);
     if (start > 1) {
         html += \`<button class="sec page-btn" onclick="goToPage(1)">1</button>\`;
-        if (start > 2) html += \`<span style="color:var(--fg2); padding:0 4px;">...</span>\`;
+        if (start > 2) html += \`<span style="color:var(--fg2);padding:0 4px;">...</span>\`;
     }
     for (let i = start; i <= end; i++) {
         if (i === page) html += \`<button class="page-btn active">\${i}</button>\`;
         else html += \`<button class="sec page-btn" onclick="goToPage(\${i})">\${i}</button>\`;
     }
     if (end < totalPages) {
-        if (end < totalPages - 1) html += \`<span style="color:var(--fg2); padding:0 4px;">...</span>\`;
+        if (end < totalPages - 1) html += \`<span style="color:var(--fg2);padding:0 4px;">...</span>\`;
         html += \`<button class="sec page-btn" onclick="goToPage(\${totalPages})">\${totalPages}</button>\`;
     }
     html += \`<button class="sec page-btn" \${page === totalPages ? 'disabled' : \`onclick="goToPage(\${page+1})"\`}>下一页</button>\`;
@@ -719,32 +863,42 @@ const renderPagination = () => {
 const goToPage = (p) => { page = p; load(); };
 const poll = (id, cb) => {
     const t = setInterval(async () => {
-        const res = await api('/task/'+id);
-        if(res.status === 'completed' || res.status === 'failed') {
-            clearInterval(t); msg(res.message); cb();
-        }
+        try {
+            const res = await api('/task/'+id);
+            if(res.status === 'completed' || res.status === 'failed') {
+                clearInterval(t); 
+                msg(res.message || (res.status === 'completed' ? '操作完成' : '操作失败')); 
+                if(cb) cb();
+            }
+        } catch(e) { clearInterval(t); }
     }, 1000);
 };
 
-const toggleIp = async (id, currentStatus) => { await api('/ips/'+id, {method:'PUT', body:JSON.stringify({active: currentStatus ? 0 : 1})}); load(); };
+const toggleIp = async (id, currentStatus) => { 
+    await api('/ips/'+id, {method:'PUT', body:JSON.stringify({active: currentStatus ? 0 : 1})}); 
+    load(); 
+};
+
 const openEdit = (id, ip, port, name, priority) => { 
     $('editId').value = id; 
     $('editIp').value = ip + ':' + port; 
     $('editName').value = name; 
-    $('editPriority').value = priority; // 新增：将权重回显到输入框
+    $('editPriority').value = priority; 
     $('editModal').style.display = 'flex'; 
 };
+
 const closeEdit = () => { $('editModal').style.display = 'none'; };
+
 const saveEdit = async () => {
     const id = $('editId').value;
     const ipStr = $('editIp').value.trim();
     const nameStr = $('editName').value.trim();
-    const priorityVal = parseInt($('editPriority').value); // 读取权重输入框的值
+    const priorityVal = parseInt($('editPriority').value);
 
     if(!ipStr) return msg('IP不能为空');
-    let fullIP = ipStr; if(nameStr) fullIP += '#' + nameStr;
+    let fullIP = ipStr; 
+    if(nameStr) fullIP += '#' + nameStr;
 
-    // 构造发送给后端的数据包
     const updateBody = { ip: fullIP };
     if (!isNaN(priorityVal)) updateBody.priority = priorityVal; 
 
@@ -754,19 +908,62 @@ const saveEdit = async () => {
         closeEdit(); 
         load(); 
     } catch(e) { 
-        msg('修改失败，格式错误'); 
+        msg('修改失败'); 
     }
 };
-const del = async (id) => { if(confirm('确定要彻底删除此IP吗？')) { await api('/ips/'+id, {method:'DELETE'}); load(); } };
 
-const toggleAll = async (active) => { if(!confirm(active ? '确定将所有节点设为启用吗？' : '确定将所有节点设为禁用吗？')) return; const res = await api('/ips/toggle-all', {method:'POST', body:JSON.stringify({active})}); msg('操作执行中...'); poll(res.taskId, load); };
-const batchImport = async () => { const ips = $('batchIps').value.split('\\n').filter(Boolean); if(!ips.length) { msg('请先在输入框填写 IP'); return; } const res = await api('/ips/batch', {method:'POST', body:JSON.stringify({ips})}); msg('导入任务已启动...'); $('batchIps').value = ''; poll(res.taskId, load); };
-const batchDelete = async () => { const ips = $('batchIps').value.split('\\n').filter(Boolean); if(!ips.length) { msg('请先在输入框填写要删除的 IP 或节点链接'); return; } if(!confirm('确定要删除上面填写的节点对应的 IP 吗？')) return; const res = await api('/ips/batch-delete', {method:'POST', body:JSON.stringify({ips})}); msg('批量删除任务已启动...'); $('batchIps').value = ''; poll(res.taskId, load); };
-const clearAll = async () => { if(!confirm('警告：确定清空所有优选IP吗？此操作不可逆！')) return; const res = await api('/ips/clear', {method:'DELETE'}); msg('清空任务启动...'); poll(res.taskId, () => { page=1; load(); }); };
-const sortIps = async () => { const res = await api('/ips/sort', {method:'POST'}); msg('排序中...'); poll(res.taskId, load); };
-const removeDuplicates = async () => { const res = await api('/ips/remove-duplicates', {method:'POST'}); msg('去重中...'); poll(res.taskId, load); };
+const del = async (id) => { 
+    if(confirm('确定要彻底删除此IP吗？')) { 
+        await api('/ips/'+id, {method:'DELETE'}); 
+        load(); 
+    } 
+};
 
-$('editModal').onclick = (e) => { if(e.target === $('editModal')) closeEdit(); };
+const toggleAll = async (active) => { 
+    if(!confirm(active ? '确定将所有节点设为启用吗？' : '确定将所有节点设为禁用吗？')) return; 
+    const res = await api('/ips/toggle-all', {method:'POST', body:JSON.stringify({active})}); 
+    msg('操作执行中...'); 
+    poll(res.taskId, load); 
+};
+
+const batchImport = async () => { 
+    const ips = $('batchIps').value.split('\\n').filter(Boolean); 
+    if(!ips.length) { msg('请先在输入框填写 IP'); return; } 
+    const res = await api('/ips/batch', {method:'POST', body:JSON.stringify({ips})}); 
+    msg('导入任务已启动...'); 
+    $('batchIps').value = ''; 
+    poll(res.taskId, load); 
+};
+
+const batchDelete = async () => { 
+    const ips = $('batchIps').value.split('\\n').filter(Boolean); 
+    if(!ips.length) { msg('请先在输入框填写要删除的 IP 或节点链接'); return; } 
+    if(!confirm('确定要删除上面填写的节点对应的 IP 吗？')) return; 
+    const res = await api('/ips/batch-delete', {method:'POST', body:JSON.stringify({ips})}); 
+    msg('批量删除任务已启动...'); 
+    $('batchIps').value = ''; 
+    poll(res.taskId, load); 
+};
+
+const clearAll = async () => { 
+    if(!confirm('警告：确定清空所有优选IP吗？此操作不可逆！')) return; 
+    const res = await api('/ips/clear', {method:'DELETE'}); 
+    msg('清空任务启动...'); 
+    poll(res.taskId, () => { page=1; load(); }); 
+};
+
+const sortIps = async () => { 
+    const res = await api('/ips/sort', {method:'POST'}); 
+    msg('排序中...'); 
+    poll(res.taskId, load); 
+};
+
+const removeDuplicates = async () => { 
+    const res = await api('/ips/remove-duplicates', {method:'POST'}); 
+    msg('去重中...'); 
+    poll(res.taskId, load); 
+};
+
 load();
 </script>
 </body>
