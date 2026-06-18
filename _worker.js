@@ -220,11 +220,11 @@ const api = {
             } catch (e) { await saveTask(kv, taskId, 'failed', e.message); }
         })());
         return json({ success: true, async: true, taskId, count: ips.length });
-    }，
+    },
     async batchDelete(db, { ips }, ctx, kv) {
         if (!Array.isArray(ips) || !ips.length) return err('列表为空');
         const taskId = crypto.randomUUID();
-        ctx。waitUntil((async () => {
+        ctx.waitUntil((async () => {
             try {
                 const deleteIps = ips.map(line => {
                     let targetIp = line.trim();
@@ -295,7 +295,7 @@ const api = {
         await db.prepare('DELETE FROM ips WHERE id=?').bind(id).run();
         await invalidateCache(kv);
         return json({ success: true });
-    }，
+    },
     async sortIps(db, ctx, kv) {
         const taskId = crypto.randomUUID();
         ctx.waitUntil((async () => {
